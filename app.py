@@ -1,11 +1,618 @@
+import streamlit as st
+import requests
+import xml.etree.ElementTree as ET
+import pandas as pd
+import urllib.parse
+import concurrent.futures
+import time
+import re
+import matplotlib.pyplot as plt
+from io import StringIO
+import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime
+import numpy as np
+from urllib.parse import urlparse
+import base64
+
+st.set_page_config(page_title="Sitemap Validator & Analyzer", layout="wide", page_icon="🌐")
+
+# Custom CSS
+st.markdown("""
+<style>
+    .main .block-container {
+        padding-top: 2rem;
+    }
+    h1, h2, h3 {
+        margin-bottom: 0.5rem;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: #f0f2f6;
+        border-radius: 4px 4px 0 0;
+        gap: 1px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #ffffff;
+        border-radius: 4px 4px 0 0;
+        border-right: 1px solid #e0e0e0;
+        border-left: 1px solid #e0e0e0;
+        border-top: 1px solid #e0e0e0;
+    }
+    div[data-testid="stMetricValue"] {
+        font-size: 28px;
+    }
+    .status-ok {
+        background-color: #d1ffd7;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        font-weight: bold;
+        color: #0a7b1e;
+    }
+    .status-warning {
+        background-color: #fff7d1;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        font-weight: bold;
+        color: #8a6b00;
+    }
+    .status-error {
+        background-color: #ffd1d1;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        font-weight: bold;
+        color: #a70000;
+    }
+    .small-info {
+        font-size: 0.8rem;
+        color: #666;
+    }
+    .footer {
+        margin-top: 3rem;
+        text-align: center;
+        color: #888;
+        font-size: 0.8rem;
+    }
+    .stProgress > div > div > div > div {
+        background-color: #2e7fff;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+class SitemapValidator:
+    def __init__(self):
+        self.state = {
+            "sitemap_url": "",
+            "sitemap_content": None,
+            "urls": [],
+            "validation_results": None,
+            "status_counts": {"2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0, "error": 0},
+            "is_processing": False,
+            "concurrent_requests": 5,
+            "timeout": 10,
+            "user_agent": "Mozilla/5.0 (Streamlit Sitemap Validator)"
+        }
+        
+    def detect_sitemaps(self, url):
+        """Detect sitemap from a given URL by checking robots.txt and common patterns"""
+        try:
+            # Parse the base URL
+            parsed_url = urlparse(url)
+            origin = f"{parsed_url.scheme}://{parsed_url.netloc}"
+            
+            # Initialize sitemap URLs list
+            sitemap_urls = []
+            
+            # Check robots.txt first
+            try:
+                robots_url = f"{origin}/robots.txt"
+                response = requests.get(robots_url, timeout=5)
+                if response.status_code == 200:
+                    robots_text = response.text
+                    # Extract sitemap URLs using regex
+                    sitemap_matches = re.findall(r'Sitemap:\s*(https?://[^\s]+)', robots_text, re.IGNORECASE)
+                    if sitemap_matches:
+                        sitemap_urls.extend(sitemap_matches)
+            except:
+                pass
+            
+            # Common sitemap patterns to check
+            sitemap_patterns = [
+                '/sitemap.xml',
+                '/sitemap_index.xml',
+                '/sitemap-index.xml',
+                '/post-sitemap.xml',
+                '/page-sitemap.xml',
+                '/product-sitemap.xml',
+                '/category-sitemap.xml',
+                '/wp-sitemap.xml',
+                '/sitemap.php',
+                '/sitemap.txt'
+            ]
+            
+            # If no sitemaps found in robots.txt, try common patterns
+            if not sitemap_urls:
+                for pattern in sitemap_patterns:
+                    sitemap_url = f"{origin}{pattern}"
+                    try:
+                        response = requests.head(sitemap_url, timeout=3)
+                        if response.status_code == 200:
+                            sitemap_urls.append(sitemap_url)
+                    except:
+                        continue
+            
+            return sitemap_urls
+        except Exception as e:
+            st.error(f"Error detecting sitemaps: {str(e)}")
+            return []
+
+    def load_sitemap(self, url):
+        """Load sitemap from URL and parse contents"""
+        try:
+            headers = {
+                'User-Agent': self.state["user_agent"],
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Connection': 'keep-alive'
+            }
+            
+            response = requests.get(url, headers=headers, timeout=self.state["timeout"])
+            if response.status_code != 200:
+                st.error(f"Failed to load sitemap. Status code: {response.status_code}")
+                return None
+            
+            sitemap_text = response.text
+            self.state["sitemap_content"] = sitemap_text
+            
+            # Validate XML format
+            validation_result = self.validate_sitemap_xml(sitemap_text)
+            if not validation_result["valid"]:
+                st.warning(f"Sitemap validation warning: {validation_result['error']}")
+            
+            # Extract URLs
+            urls = self.extract_urls_from_sitemap(sitemap_text)
+            self.state["urls"] = urls
+            
+            return sitemap_text
+            
+        except Exception as e:
+            st.error(f"Error loading sitemap: {str(e)}")
+            return None
+    
+    def validate_sitemap_xml(self, xml_content):
+        """Validate sitemap XML structure"""
+        try:
+            # Parse XML content
+            root = ET.fromstring(xml_content)
+            
+            # Check for namespace
+            namespaces = root.attrib.get('xmlns')
+            if not namespaces or "sitemaps.org/schemas/sitemap" not in namespaces:
+                return {
+                    "valid": False,
+                    "error": "Missing or incorrect sitemap namespace"
+                }
+            
+            # Check if it's a sitemap index
+            is_sitemap_index = root.tag.endswith('sitemapindex')
+            
+            # Check for required elements
+            if is_sitemap_index:
+                sitemap_nodes = root.findall('.//{*}sitemap')
+                if not sitemap_nodes:
+                    return {
+                        "valid": False,
+                        "error": "No sitemap entries found in sitemap index"
+                    }
+                
+                # Check for loc in each sitemap entry
+                missing_loc = []
+                for i, sitemap in enumerate(sitemap_nodes):
+                    loc = sitemap.find('.//{*}loc')
+                    if loc is None or not loc.text:
+                        missing_loc.append(i + 1)
+                
+                if missing_loc:
+                    return {
+                        "valid": False,
+                        "error": f"Missing loc element in sitemap entries: {', '.join(map(str, missing_loc))}"
+                    }
+            else:
+                url_nodes = root.findall('.//{*}url')
+                if not url_nodes:
+                    return {
+                        "valid": False,
+                        "error": "No URL entries found in sitemap"
+                    }
+                
+                # Check for loc in each URL entry
+                missing_loc = []
+                for i, url in enumerate(url_nodes):
+                    loc = url.find('.//{*}loc')
+                    if loc is None or not loc.text:
+                        missing_loc.append(i + 1)
+                
+                if missing_loc:
+                    return {
+                        "valid": False,
+                        "error": f"Missing loc element in URL entries: {', '.join(map(str, missing_loc))}"
+                    }
+            
+            return {
+                "valid": True
+            }
+            
+        except ET.ParseError as e:
+            return {
+                "valid": False,
+                "error": f"XML parsing error: {str(e)}"
+            }
+        except Exception as e:
+            return {
+                "valid": False,
+                "error": f"Validation error: {str(e)}"
+            }
+
+    def extract_urls_from_sitemap(self, sitemap_text):
+        """Extract URLs, lastmod, and other data from sitemap"""
+        try:
+            root = ET.fromstring(sitemap_text)
+            urls_data = []
+            
+            # Determine if it's a sitemap index
+            is_sitemap_index = root.tag.endswith('sitemapindex')
+            
+            if is_sitemap_index:
+                # Process sitemap index
+                for sitemap in root.findall('.//{*}sitemap'):
+                    loc_elem = sitemap.find('.//{*}loc')
+                    lastmod_elem = sitemap.find('.//{*}lastmod')
+                    
+                    if loc_elem is not None and loc_elem.text:
+                        url_data = {
+                            "url": loc_elem.text.strip(),
+                            "type": "sitemap",
+                            "lastmod": lastmod_elem.text.strip() if lastmod_elem is not None and lastmod_elem.text else None
+                        }
+                        urls_data.append(url_data)
+            else:
+                # Process regular sitemap
+                for url in root.findall('.//{*}url'):
+                    loc_elem = url.find('.//{*}loc')
+                    lastmod_elem = url.find('.//{*}lastmod')
+                    changefreq_elem = url.find('.//{*}changefreq')
+                    priority_elem = url.find('.//{*}priority')
+                    
+                    # Extract image data
+                    images = []
+                    for image in url.findall('.//{*}image'):
+                        img_loc = image.find('.//{*}loc')
+                        if img_loc is not None and img_loc.text:
+                            images.append(img_loc.text.strip())
+                    
+                    # Extract video data
+                    videos = []
+                    for video in url.findall('.//{*}video'):
+                        video_title = video.find('.//{*}title')
+                        if video_title is not None and video_title.text:
+                            videos.append(video_title.text.strip())
+                    
+                    if loc_elem is not None and loc_elem.text:
+                        url_data = {
+                            "url": loc_elem.text.strip(),
+                            "lastmod": lastmod_elem.text.strip() if lastmod_elem is not None and lastmod_elem.text else None,
+                            "changefreq": changefreq_elem.text.strip() if changefreq_elem is not None and changefreq_elem.text else None,
+                            "priority": priority_elem.text.strip() if priority_elem is not None and priority_elem.text else None,
+                            "images": images,
+                            "videos": videos
+                        }
+                        urls_data.append(url_data)
+            
+            return urls_data
+        
+        except Exception as e:
+            st.error(f"Error extracting URLs: {str(e)}")
+            return []
+
+    def test_url(self, url_data):
+        """Test a single URL and return status info"""
+        url = url_data["url"]
+        try:
+            headers = {
+                'User-Agent': self.state["user_agent"],
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Connection': 'keep-alive'
+            }
+            
+            start_time = time.time()
+            response = requests.head(url, headers=headers, timeout=self.state["timeout"], allow_redirects=True)
+            end_time = time.time()
+            
+            response_time = round((end_time - start_time) * 1000)  # Convert to ms
+            
+            # Check if URL was redirected
+            redirected = response.url != url
+            final_url = response.url if redirected else None
+            
+            status_group = self.get_status_group(response.status_code)
+            self.state["status_counts"][status_group] += 1
+            
+            return {
+                "url": url,
+                "status_code": response.status_code,
+                "response_time": response_time,
+                "redirected": redirected,
+                "final_url": final_url,
+                "status_group": status_group
+            }
+            
+        except requests.exceptions.Timeout:
+            self.state["status_counts"]["error"] += 1
+            return {
+                "url": url,
+                "status_code": "Timeout",
+                "response_time": self.state["timeout"] * 1000,
+                "redirected": False,
+                "final_url": None,
+                "status_group": "error"
+            }
+        except Exception as e:
+            self.state["status_counts"]["error"] += 1
+            return {
+                "url": url,
+                "status_code": "Error",
+                "response_time": 0,
+                "redirected": False,
+                "final_url": None,
+                "status_group": "error",
+                "error": str(e)
+            }
+
+    def get_status_group(self, status):
+        """Get status group from status code"""
+        if isinstance(status, str):
+            return "error"
+        
+        if status >= 200 and status < 300:
+            return "2xx"
+        elif status >= 300 and status < 400:
+            return "3xx"
+        elif status >= 400 and status < 500:
+            return "4xx"
+        elif status >= 500:
+            return "5xx"
+        else:
+            return "error"
+
+    def test_all_urls(self):
+        """Test all URLs with concurrency"""
+        self.state["is_processing"] = True
+        self.state["status_counts"] = {"2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0, "error": 0}
+        
+        results = []
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.state["concurrent_requests"]) as executor:
+            future_to_url = {executor.submit(self.test_url, url_data): url_data for url_data in self.state["urls"]}
+            
+            # Create a progress bar
+            total_urls = len(self.state["urls"])
+            progress_bar = st.progress(0)
+            progress_text = st.empty()
+            
+            completed = 0
+            for future in concurrent.futures.as_completed(future_to_url):
+                result = future.result()
+                results.append(result)
+                
+                # Update progress
+                completed += 1
+                progress = completed / total_urls
+                progress_bar.progress(progress)
+                progress_text.text(f"Testing URLs: {completed}/{total_urls}")
+        
+        # Clear progress elements
+        progress_bar.empty()
+        progress_text.empty()
+        
+        self.state["validation_results"] = results
+        self.state["is_processing"] = False
+        
+        return results
+    
+    def check_robots_txt(self, url):
+        """Check robots.txt for sitemap declarations"""
+        try:
+            parsed_url = urlparse(url)
+            origin = f"{parsed_url.scheme}://{parsed_url.netloc}"
+            robots_url = f"{origin}/robots.txt"
+            
+            response = requests.get(robots_url, timeout=5)
+            if response.status_code != 200:
+                return {
+                    "found": False,
+                    "content": None,
+                    "sitemaps": [],
+                    "sitemap_declared": False
+                }
+            
+            robots_content = response.text
+            
+            # Extract sitemap declarations
+            sitemap_matches = re.findall(r'Sitemap:\s*(https?://[^\s]+)', robots_content, re.IGNORECASE)
+            sitemap_declared = url in sitemap_matches if sitemap_matches else False
+            
+            return {
+                "found": True,
+                "content": robots_content,
+                "sitemaps": sitemap_matches,
+                "sitemap_declared": sitemap_declared
+            }
+        
+        except Exception as e:
+            return {
+                "found": False,
+                "content": f"Error: {str(e)}",
+                "sitemaps": [],
+                "sitemap_declared": False
+            }
+    
+    def analyze_performance(self, results):
+        """Analyze performance metrics from test results"""
+        if not results:
+            return {
+                "avg_response_time": 0,
+                "status_distribution": {
+                    "2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0, "error": 0
+                },
+                "performance_score": 0,
+                "recommendations": ["No data available for performance analysis"]
+            }
+        
+        # Calculate metrics
+        total_responses = len(results)
+        valid_response_times = [r["response_time"] for r in results if isinstance(r["response_time"], (int, float))]
+        
+        if not valid_response_times:
+            avg_time = 0
+        else:
+            avg_time = sum(valid_response_times) / len(valid_response_times)
+        
+        # Status distribution
+        status_distribution = {
+            "2xx": sum(1 for r in results if r["status_group"] == "2xx"),
+            "3xx": sum(1 for r in results if r["status_group"] == "3xx"),
+            "4xx": sum(1 for r in results if r["status_group"] == "4xx"),
+            "5xx": sum(1 for r in results if r["status_group"] == "5xx"),
+            "error": sum(1 for r in results if r["status_group"] == "error")
+        }
+        
+        # Calculate performance score (0-100)
+        performance_score = 100
+        
+        # Reduce score based on average response time
+        if avg_time > 200:
+            performance_score -= min(30, (avg_time - 200) / 30)
+        
+        # Reduce score based on error rates
+        error_rate = (status_distribution["4xx"] + status_distribution["5xx"] + status_distribution["error"]) / total_responses
+        performance_score -= min(30, error_rate * 100)
+        
+        # Reduce score based on redirect rates
+        redirect_rate = status_distribution["3xx"] / total_responses
+        performance_score -= min(20, redirect_rate * 50)
+        
+        # Ensure score is between 0-100
+        performance_score = max(0, min(100, round(performance_score)))
+        
+        # Generate recommendations
+        recommendations = []
+        
+        if avg_time > 500:
+            recommendations.append('Response times are high. Consider optimizing server performance or implementing CDN.')
+        
+        if error_rate > 0.05:
+            recommendations.append('Error rate is above 5%. Review and fix broken URLs.')
+        
+        if redirect_rate > 0.1:
+            recommendations.append('Redirect rate is above 10%. Update sitemap with direct URLs to reduce redirects.')
+        
+        return {
+            "avg_response_time": round(avg_time),
+            "status_distribution": status_distribution,
+            "performance_score": performance_score,
+            "recommendations": recommendations
+        }
+
+    def calculate_health_score(self, results):
+        """Calculate sitemap health score from test results"""
+        if not results:
+            return 0
+        
+        total_urls = len(results)
+        valid_urls = sum(1 for r in results if r["status_group"] == "2xx")
+        
+        if total_urls == 0:
+            return 0
+        
+        return round((valid_urls / total_urls) * 100)
+
+    def find_slowest_urls(self, results, n=5):
+        """Find the n slowest URLs from test results"""
+        valid_results = [r for r in results if isinstance(r["response_time"], (int, float))]
+        if not valid_results:
+            return []
+        
+        sorted_results = sorted(valid_results, key=lambda r: r["response_time"], reverse=True)
+        return sorted_results[:n]
+
+    def format_xml(self, xml_content):
+        """Format XML with indentation"""
+        try:
+            from xml.dom import minidom
+            parsed = minidom.parseString(xml_content)
+            return parsed.toprettyxml(indent="  ")
+        except:
+            # Fallback for XML that can't be parsed
+            formatted = ''
+            indent = ''
+            tab = '  '
+            
+            for line in xml_content.split('\n'):
+                if '</' in line:
+                    indent = indent[:-len(tab)]
+                
+                formatted += indent + line + '\n'
+                
+                if '>' in line and not '/>' in line and not '</' in line:
+                    indent += tab
+            
+            return formatted
+
+    def get_url_domain(self, url):
+        """Extract domain from URL"""
+        try:
+            parsed_url = urlparse(url)
+            return parsed_url.netloc
+        except:
+            return None
+    
+    def find_replace_xml(self, xml_content, find_text, replace_text, use_regex=False):
+        """Find and replace text in XML content"""
+        try:
+            if use_regex:
+                modified = re.sub(find_text, replace_text, xml_content)
+            else:
+                modified = xml_content.replace(find_text, replace_text)
+            
+            # Count replacements
+            if use_regex:
+                count = len(re.findall(find_text, xml_content))
+            else:
+                count = xml_content.count(find_text)
+            
+            return {
+                "modified_content": modified,
+                "count": count
+            }
+        except Exception as e:
+            return {
+                "error": str(e),
+                "modified_content": xml_content,
+                "count": 0
+            }
+
 def main():
     st.title("🌐 Sitemap Validator & Analyzer")
     st.markdown("Validate, test, and analyze XML sitemaps to improve SEO and website health.")
     
-    # Initialize validator
-    if 'validator' not in st.session_state:
-        st.session_state.validator = SitemapValidator()
-    validator = st.session_state.validator
+    validator = SitemapValidator()
     
     # Initialize session state
     if 'sitemap_data' not in st.session_state:
@@ -16,10 +623,6 @@ def main():
             "validation_results": None,
             "robots_txt_data": None
         }
-    
-    # Initialize debug mode
-    if 'debug_mode' not in st.session_state:
-        st.session_state.debug_mode = False
     
     # URL input section
     col1, col2, col3 = st.columns([3, 1, 1])
@@ -32,60 +635,48 @@ def main():
         )
     
     with col2:
-        if st.button("🔎 Detect Sitemaps", use_container_width=True, key="detect_sitemaps_button"):
+        if st.button("🔎 Detect Sitemaps", use_container_width=True):
             if not sitemap_url:
                 st.warning("Please enter a website URL")
             else:
-                try:
-                    with st.spinner("Detecting sitemaps..."):
-                        detected_sitemaps = validator.detect_sitemaps(sitemap_url)
-                        if detected_sitemaps:
-                            st.session_state.detected_sitemaps = detected_sitemaps
-                            if len(detected_sitemaps) == 1:
-                                sitemap_url = detected_sitemaps[0]
-                                st.success(f"Found sitemap: {sitemap_url}")
-                            else:
-                                st.success(f"Found {len(detected_sitemaps)} sitemaps!")
-                                sitemap_url = st.selectbox(
-                                    "Select a sitemap",
-                                    options=detected_sitemaps,
-                                    key="detected_sitemap_selector"
-                                )
+                with st.spinner("Detecting sitemaps..."):
+                    detected_sitemaps = validator.detect_sitemaps(sitemap_url)
+                    if detected_sitemaps:
+                        sitemap_options = detected_sitemaps
+                        if len(sitemap_options) == 1:
+                            sitemap_url = sitemap_options[0]
+                            st.success(f"Found sitemap: {sitemap_url}")
                         else:
-                            st.warning("No sitemaps found. Try entering URL manually.")
-                except Exception as e:
-                    st.error(f"Error detecting sitemaps: {str(e)}")
+                            st.success(f"Found {len(sitemap_options)} sitemaps!")
+                            sitemap_url = st.selectbox(
+                                "Select a sitemap",
+                                options=sitemap_options
+                            )
+                    else:
+                        st.warning("No sitemaps found. Try entering URL manually.")
     
     with col3:
-        if st.button("📥 Load Sitemap", use_container_width=True, key="load_sitemap_button"):
+        if st.button("📥 Load Sitemap", use_container_width=True):
             if not sitemap_url:
                 st.warning("Please enter a sitemap URL")
             else:
-                try:
-                    with st.spinner("Loading sitemap..."):
-                        sitemap_content = validator.load_sitemap(sitemap_url)
-                        if sitemap_content:
-                            urls = validator.state["urls"]
-                            
-                            # Check robots.txt
-                            robots_txt_data = validator.check_robots_txt(sitemap_url)
-                            
-                            # Update session state
-                            st.session_state.sitemap_data = {
-                                "sitemap_url": sitemap_url,
-                                "sitemap_content": sitemap_content,
-                                "urls": urls,
-                                "robots_txt_data": robots_txt_data
-                            }
-                            
-                            st.success(f"Loaded {len(urls)} URLs from sitemap")
-                            
-                            # Force validator to use the URLs
-                            validator.state["urls"] = urls
-                            validator.state["sitemap_content"] = sitemap_content
-                            validator.state["sitemap_url"] = sitemap_url
-                except Exception as e:
-                    st.error(f"Failed to load sitemap: {str(e)}")
+                with st.spinner("Loading sitemap..."):
+                    sitemap_content = validator.load_sitemap(sitemap_url)
+                    if sitemap_content:
+                        urls = validator.state["urls"]
+                        
+                        # Check robots.txt
+                        robots_txt_data = validator.check_robots_txt(sitemap_url)
+                        
+                        # Update session state
+                        st.session_state.sitemap_data = {
+                            "sitemap_url": sitemap_url,
+                            "sitemap_content": sitemap_content,
+                            "urls": urls,
+                            "robots_txt_data": robots_txt_data
+                        }
+                        
+                        st.success(f"Loaded {len(urls)} URLs from sitemap")
     
     # Only show tabs if sitemap is loaded
     if st.session_state.sitemap_data.get("sitemap_content"):
@@ -299,21 +890,11 @@ def main():
                 col1, col2 = st.columns([1, 3])
                 
                 with col1:
-                    if st.button("🧪 Test All URLs", use_container_width=True, key="test_all_urls_button"):
-                        validator.state["urls"] = st.session_state.sitemap_data.get("urls", [])
-                        if not validator.state["urls"]:
-                            st.error("No URLs to test. Please load a sitemap first.")
-                        else:
-                            try:
-                                with st.spinner(f"Testing {len(validator.state['urls'])} URLs..."):
-                                    results = validator.test_all_urls()
-                                    if results:
-                                        st.session_state.sitemap_data["validation_results"] = results
-                                        st.success(f"Tested {len(results)} URLs")
-                                    else:
-                                        st.error("No results returned from URL testing")
-                            except Exception as e:
-                                st.error(f"Error testing URLs: {str(e)}")
+                    if st.button("🧪 Test All URLs", use_container_width=True):
+                        with st.spinner("Testing URLs..."):
+                            results = validator.test_all_urls()
+                            st.session_state.sitemap_data["validation_results"] = results
+                            st.success(f"Tested {len(results)} URLs")
                 
                 # Display results if available
                 results = st.session_state.sitemap_data.get("validation_results")
@@ -798,19 +1379,6 @@ def main():
                 for recommendation in general_recommendations:
                     st.markdown(f"- {recommendation}")
 
-    # Debug options
-    with st.expander("Advanced Options", expanded=False):
-        debug_col1, debug_col2 = st.columns(2)
-        
-        with debug_col1:
-            st.session_state.debug_mode = st.checkbox("Enable Debug Mode", value=st.session_state.get('debug_mode', False))
-            
-        with debug_col2:
-            if st.button("Clear Session State"):
-                for key in list(st.session_state.keys()):
-                    del st.session_state[key]
-                st.experimental_rerun()
-    
     # Footer
     st.markdown("""
     <div class="footer">
@@ -820,828 +1388,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-import streamlit as st
-import requests
-import xml.etree.ElementTree as ET
-import pandas as pd
-import concurrent.futures
-import time
-import re
-import plotly.express as px
-import numpy as np
-from urllib.parse import urlparse
-import base64
-
-st.set_page_config(page_title="Sitemap Validator & Analyzer", layout="wide", page_icon="🌐")
-
-# Custom CSS
-st.markdown("""
-<style>
-    .main .block-container {
-        padding-top: 2rem;
-    }
-    h1, h2, h3 {
-        margin-bottom: 0.5rem;
-    }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 2px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        white-space: pre-wrap;
-        background-color: #f0f2f6;
-        border-radius: 4px 4px 0 0;
-        gap: 1px;
-        padding-top: 10px;
-        padding-bottom: 10px;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #ffffff;
-        border-radius: 4px 4px 0 0;
-        border-right: 1px solid #e0e0e0;
-        border-left: 1px solid #e0e0e0;
-        border-top: 1px solid #e0e0e0;
-    }
-    div[data-testid="stMetricValue"] {
-        font-size: 28px;
-    }
-    .status-ok {
-        background-color: #d1ffd7;
-        padding: 0.2rem 0.5rem;
-        border-radius: 4px;
-        font-weight: bold;
-        color: #0a7b1e;
-    }
-    .status-warning {
-        background-color: #fff7d1;
-        padding: 0.2rem 0.5rem;
-        border-radius: 4px;
-        font-weight: bold;
-        color: #8a6b00;
-    }
-    .status-error {
-        background-color: #ffd1d1;
-        padding: 0.2rem 0.5rem;
-        border-radius: 4px;
-        font-weight: bold;
-        color: #a70000;
-    }
-    .small-info {
-        font-size: 0.8rem;
-        color: #666;
-    }
-    .footer {
-        margin-top: 3rem;
-        text-align: center;
-        color: #888;
-        font-size: 0.8rem;
-    }
-    .stProgress > div > div > div > div {
-        background-color: #2e7fff;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-class SitemapValidator:
-    def __init__(self):
-        self.state = {
-            "sitemap_url": "",
-            "sitemap_content": None,
-            "urls": [],
-            "validation_results": None,
-            "status_counts": {"2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0, "error": 0},
-            "is_processing": False,
-            "concurrent_requests": 5,
-            "timeout": 10,
-            "user_agent": "Mozilla/5.0 (Streamlit Sitemap Validator)"
-        }
-        
-    def detect_sitemaps(self, url):
-        try:
-            if not url.startswith(('http://', 'https://')):
-                url = 'https://' + url
-                
-            parsed_url = urlparse(url)
-            origin = f"{parsed_url.scheme}://{parsed_url.netloc}"
-            
-            sitemap_urls = []
-            
-            # Check robots.txt first
-            robots_found = False
-            try:
-                robots_url = f"{origin}/robots.txt"
-                response = requests.get(robots_url, timeout=5)
-                if response.status_code == 200:
-                    robots_found = True
-                    robots_text = response.text
-                    sitemap_matches = re.findall(r'Sitemap:\s*(https?://[^\s]+)', robots_text, re.IGNORECASE)
-                    if sitemap_matches:
-                        for match in sitemap_matches:
-                            sitemap_urls.append(match.strip())
-                        st.info(f"Found {len(sitemap_matches)} sitemaps declared in robots.txt")
-            except Exception as robots_error:
-                st.warning(f"Could not check robots.txt: {str(robots_error)}")
-            
-            # Check common patterns if no sitemaps found
-            if not robots_found or not sitemap_urls:
-                sitemap_patterns = [
-                    '/sitemap.xml',
-                    '/sitemap_index.xml',
-                    '/sitemap-index.xml',
-                    '/post-sitemap.xml',
-                    '/page-sitemap.xml',
-                    '/product-sitemap.xml',
-                    '/category-sitemap.xml',
-                    '/wp-sitemap.xml',
-                    '/sitemap.php',
-                    '/sitemap.txt'
-                ]
-                
-                for pattern in sitemap_patterns:
-                    try:
-                        sitemap_url = f"{origin}{pattern}"
-                        response = requests.head(sitemap_url, timeout=3)
-                        if response.status_code == 200:
-                            sitemap_urls.append(sitemap_url)
-                        elif response.status_code == 405:
-                            response = requests.get(sitemap_url, timeout=3, stream=True, headers={'Range': 'bytes=0-1024'})
-                            if response.status_code == 200:
-                                sitemap_urls.append(sitemap_url)
-                            response.close()
-                    except:
-                        continue
-            
-            # Deduplicate urls
-            sitemap_urls = list(dict.fromkeys(sitemap_urls))
-            
-            # Add original URL if it looks like a sitemap
-            if url.endswith('.xml') and url not in sitemap_urls:
-                try:
-                    response = requests.head(url, timeout=3)
-                    if response.status_code == 200:
-                        sitemap_urls.append(url)
-                except:
-                    pass
-            
-            return sitemap_urls
-        except Exception as e:
-            st.error(f"Error detecting sitemaps: {str(e)}")
-            return []
-
-    def load_sitemap(self, url):
-        try:
-            if not url:
-                st.error("No sitemap URL provided")
-                return None
-                
-            url = url.strip()
-            if not url.startswith(('http://', 'https://')):
-                url = 'https://' + url
-                
-            headers = {
-                'User-Agent': self.state["user_agent"],
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Connection': 'keep-alive'
-            }
-            
-            response = requests.get(url, headers=headers, timeout=self.state["timeout"])
-            if response.status_code != 200:
-                content_type = response.headers.get('Content-Type', '')
-                st.error(f"Failed to load sitemap. Status code: {response.status_code}, Content-Type: {content_type}")
-                return None
-            
-            sitemap_text = response.text
-            content_type = response.headers.get('Content-Type', '')
-            
-            # Check if it's actually XML
-            if 'xml' not in content_type.lower() and '<?xml' not in sitemap_text[:100].lower():
-                # Check for gzipped content
-                if 'gzip' in content_type.lower() or sitemap_text.startswith('\x1f\x8b'):
-                    st.warning("Detected compressed sitemap. Attempting to decompress...")
-                    import gzip
-                    import io
-                    try:
-                        raw_content = response.content
-                        with gzip.GzipFile(fileobj=io.BytesIO(raw_content)) as f:
-                            sitemap_text = f.read().decode('utf-8')
-                    except Exception as gz_error:
-                        st.error(f"Failed to decompress sitemap: {str(gz_error)}")
-                        return None
-                else:
-                    st.warning(f"Response doesn't appear to be XML (Content-Type: {content_type}). Will attempt to parse anyway.")
-            
-            self.state["sitemap_content"] = sitemap_text
-            self.state["sitemap_url"] = url
-            
-            # Validate XML format
-            validation_result = self.validate_sitemap_xml(sitemap_text)
-            if not validation_result["valid"]:
-                st.warning(f"Sitemap validation warning: {validation_result['error']}")
-                
-                # If parsing failed, show sample content
-                if "XML parsing error" in validation_result["error"]:
-                    st.code(sitemap_text[:500] + "...", language="xml")
-            
-            # Extract URLs
-            urls = self.extract_urls_from_sitemap(sitemap_text)
-            self.state["urls"] = urls
-            
-            if not urls:
-                st.warning("No URLs found in the sitemap. Please check if it's a valid sitemap XML.")
-                
-            return sitemap_text
-            
-        except requests.exceptions.Timeout:
-            st.error(f"Timeout error loading sitemap from {url}")
-            return None
-        except requests.exceptions.SSLError:
-            st.error(f"SSL error loading sitemap. Check if the site has a valid certificate.")
-            return None
-        except requests.exceptions.ConnectionError:
-            st.error(f"Connection error loading sitemap. Check if the URL is correct and the server is accessible.")
-            return None
-        except Exception as e:
-            st.error(f"Error loading sitemap: {str(e)}")
-            return None
-    
-    def validate_sitemap_xml(self, xml_content):
-        try:
-            root = ET.fromstring(xml_content)
-            
-            # Check for namespace
-            namespaces = root.attrib.get('xmlns')
-            if not namespaces or "sitemaps.org/schemas/sitemap" not in namespaces:
-                return {
-                    "valid": False,
-                    "error": "Missing or incorrect sitemap namespace"
-                }
-            
-            # Check if it's a sitemap index
-            is_sitemap_index = root.tag.endswith('sitemapindex')
-            
-            # Check for required elements
-            if is_sitemap_index:
-                sitemap_nodes = root.findall('.//{*}sitemap')
-                if not sitemap_nodes:
-                    return {
-                        "valid": False,
-                        "error": "No sitemap entries found in sitemap index"
-                    }
-                
-                # Check for loc in each sitemap entry
-                missing_loc = []
-                for i, sitemap in enumerate(sitemap_nodes):
-                    loc = sitemap.find('.//{*}loc')
-                    if loc is None or not loc.text:
-                        missing_loc.append(i + 1)
-                
-                if missing_loc:
-                    return {
-                        "valid": False,
-                        "error": f"Missing loc element in sitemap entries: {', '.join(map(str, missing_loc))}"
-                    }
-            else:
-                url_nodes = root.findall('.//{*}url')
-                if not url_nodes:
-                    return {
-                        "valid": False,
-                        "error": "No URL entries found in sitemap"
-                    }
-                
-                # Check for loc in each URL entry
-                missing_loc = []
-                for i, url in enumerate(url_nodes):
-                    loc = url.find('.//{*}loc')
-                    if loc is None or not loc.text:
-                        missing_loc.append(i + 1)
-                
-                if missing_loc:
-                    return {
-                        "valid": False,
-                        "error": f"Missing loc element in URL entries: {', '.join(map(str, missing_loc))}"
-                    }
-            
-            return {
-                "valid": True
-            }
-            
-        except ET.ParseError as e:
-            return {
-                "valid": False,
-                "error": f"XML parsing error: {str(e)}"
-            }
-        except Exception as e:
-            return {
-                "valid": False,
-                "error": f"Validation error: {str(e)}"
-            }
-
-    def extract_urls_from_sitemap(self, sitemap_text):
-        if not sitemap_text:
-            return []
-            
-        try:
-            # Handle plain text sitemaps
-            if not sitemap_text.strip().startswith('<'):
-                lines = sitemap_text.strip().split('\n')
-                urls_data = []
-                for line in lines:
-                    line = line.strip()
-                    if line and (line.startswith('http://') or line.startswith('https://')):
-                        urls_data.append({
-                            "url": line,
-                            "lastmod": None,
-                            "changefreq": None,
-                            "priority": None,
-                            "images": [],
-                            "videos": []
-                        })
-                if urls_data:
-                    st.info(f"Detected plain text sitemap with {len(urls_data)} URLs")
-                    return urls_data
-            
-            # Process as XML
-            root = ET.fromstring(sitemap_text)
-            urls_data = []
-            
-            # Check if it's a sitemap index
-            is_sitemap_index = 'sitemapindex' in root.tag
-            
-            if is_sitemap_index:
-                st.info("Detected sitemap index with multiple sitemaps")
-                
-                sitemaps = root.findall('.//{*}sitemap')
-                for sitemap in sitemaps:
-                    loc_elem = sitemap.find('.//{*}loc')
-                    lastmod_elem = sitemap.find('.//{*}lastmod')
-                    
-                    if loc_elem is not None and loc_elem.text:
-                        url_data = {
-                            "url": loc_elem.text.strip(),
-                            "type": "sitemap",
-                            "lastmod": lastmod_elem.text.strip() if lastmod_elem is not None and lastmod_elem.text else None
-                        }
-                        urls_data.append(url_data)
-            else:
-                # Process regular sitemap
-                urls = root.findall('.//{*}url')
-                
-                # Try without namespace if no URLs found
-                if not urls:
-                    try:
-                        if 'urlset' in root.tag:
-                            urls = root.findall('.//url')
-                    except:
-                        pass
-                
-                for url in urls:
-                    try:
-                        # Try with namespaces first
-                        loc_elem = url.find('.//{*}loc')
-                        # Try without namespace
-                        if loc_elem is None:
-                            loc_elem = url.find('.//loc')
-                        
-                        lastmod_elem = url.find('.//{*}lastmod') or url.find('.//lastmod')
-                        changefreq_elem = url.find('.//{*}changefreq') or url.find('.//changefreq')
-                        priority_elem = url.find('.//{*}priority') or url.find('.//priority')
-                        
-                        # Extract image data
-                        images = []
-                        for img_pattern in ['.//{*}image', './/image', './/{http://www.google.com/schemas/sitemap-image/1.1}image']:
-                            for image in url.findall(img_pattern):
-                                img_loc = image.find('.//{*}loc') or image.find('.//loc')
-                                if img_loc is not None and img_loc.text:
-                                    images.append(img_loc.text.strip())
-                        
-                        # Extract video data
-                        videos = []
-                        for video_pattern in ['.//{*}video', './/video', './/{http://www.google.com/schemas/sitemap-video/1.1}video']:
-                            for video in url.findall(video_pattern):
-                                video_title = video.find('.//{*}title') or video.find('.//title')
-                                if video_title is not None and video_title.text:
-                                    videos.append(video_title.text.strip())
-                        
-                        if loc_elem is not None and loc_elem.text:
-                            url_text = loc_elem.text.strip()
-                            # Fix URL if relative
-                            if not url_text.startswith(('http://', 'https://')):
-                                base_url = self.state.get("sitemap_url", "")
-                                if base_url:
-                                    parsed_base = urlparse(base_url)
-                                    base_domain = f"{parsed_base.scheme}://{parsed_base.netloc}"
-                                    if url_text.startswith('/'):
-                                        url_text = base_domain + url_text
-                                    else:
-                                        url_text = base_domain + '/' + url_text
-                            
-                            url_data = {
-                                "url": url_text,
-                                "lastmod": lastmod_elem.text.strip() if lastmod_elem is not None and lastmod_elem.text else None,
-                                "changefreq": changefreq_elem.text.strip() if changefreq_elem is not None and changefreq_elem.text else None,
-                                "priority": priority_elem.text.strip() if priority_elem is not None and priority_elem.text else None,
-                                "images": images,
-                                "videos": videos
-                            }
-                            urls_data.append(url_data)
-                    except Exception as url_error:
-                        st.warning(f"Error processing a URL in sitemap: {str(url_error)}")
-                        continue
-            
-            return urls_data
-        
-        except ET.ParseError as parse_error:
-            st.error(f"XML parsing error: {str(parse_error)}")
-            
-            # Try to handle as HTML
-            if "<html" in sitemap_text.lower():
-                st.warning("The response appears to be HTML instead of XML. This may not be a sitemap file.")
-                
-                # Extract URLs from HTML as fallback
-                try:
-                    urls = re.findall(r'href=[\'"]?([^\'" >]+)', sitemap_text)
-                    valid_urls = []
-                    for url in urls:
-                        if url.startswith(('http://', 'https://')):
-                            valid_urls.append({"url": url})
-                    
-                    if valid_urls:
-                        st.info(f"Extracted {len(valid_urls)} URLs from HTML content as fallback")
-                        return valid_urls
-                except:
-                    pass
-            
-            return []
-        except Exception as e:
-            st.error(f"Error extracting URLs: {str(e)}")
-            return []
-
-    def test_url(self, url_data):
-        if not url_data or not isinstance(url_data, dict):
-            return {
-                "url": "Unknown URL",
-                "status_code": "Error",
-                "response_time": 0,
-                "redirected": False,
-                "final_url": None,
-                "status_group": "error",
-                "error": "Invalid URL data"
-            }
-            
-        url = url_data.get("url", "")
-        if not url:
-            return {
-                "url": "Empty URL",
-                "status_code": "Error",
-                "response_time": 0,
-                "redirected": False,
-                "final_url": None,
-                "status_group": "error",
-                "error": "Empty URL"
-            }
-            
-        try:
-            headers = {
-                'User-Agent': self.state["user_agent"],
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Connection': 'keep-alive'
-            }
-            
-            # Try HEAD request first
-            start_time = time.time()
-            try:
-                response = requests.head(
-                    url, 
-                    headers=headers, 
-                    timeout=self.state["timeout"], 
-                    allow_redirects=True
-                )
-                
-                # Try GET for Method Not Allowed
-                if response.status_code == 405:
-                    response = requests.get(
-                        url,
-                        headers=headers,
-                        timeout=self.state["timeout"],
-                        allow_redirects=True,
-                        stream=True
-                    )
-                    response.close()
-            except requests.exceptions.Timeout:
-                # Fallback to GET on timeout
-                response = requests.get(
-                    url,
-                    headers=headers,
-                    timeout=self.state["timeout"],
-                    allow_redirects=True,
-                    stream=True
-                )
-                response.close()
-                
-            end_time = time.time()
-            
-            response_time = round((end_time - start_time) * 1000)
-            
-            # Check if redirected
-            redirected = response.url != url
-            final_url = response.url if redirected else None
-            
-            status_group = self.get_status_group(response.status_code)
-            self.state["status_counts"][status_group] += 1
-            
-            return {
-                "url": url,
-                "status_code": response.status_code,
-                "response_time": response_time,
-                "redirected": redirected,
-                "final_url": final_url,
-                "status_group": status_group
-            }
-            
-        except requests.exceptions.Timeout:
-            self.state["status_counts"]["error"] += 1
-            return {
-                "url": url,
-                "status_code": "Timeout",
-                "response_time": self.state["timeout"] * 1000,
-                "redirected": False,
-                "final_url": None,
-                "status_group": "error"
-            }
-        except requests.exceptions.SSLError:
-            self.state["status_counts"]["error"] += 1
-            return {
-                "url": url,
-                "status_code": "SSL Error",
-                "response_time": 0,
-                "redirected": False,
-                "final_url": None,
-                "status_group": "error"
-            }
-        except requests.exceptions.ConnectionError:
-            self.state["status_counts"]["error"] += 1
-            return {
-                "url": url,
-                "status_code": "Connection Error",
-                "response_time": 0,
-                "redirected": False,
-                "final_url": None,
-                "status_group": "error"
-            }
-        except Exception as e:
-            self.state["status_counts"]["error"] += 1
-            return {
-                "url": url,
-                "status_code": "Error",
-                "response_time": 0,
-                "redirected": False,
-                "final_url": None,
-                "status_group": "error",
-                "error": str(e)
-            }
-
-    def get_status_group(self, status):
-        if isinstance(status, str):
-            return "error"
-        
-        if status >= 200 and status < 300:
-            return "2xx"
-        elif status >= 300 and status < 400:
-            return "3xx"
-        elif status >= 400 and status < 500:
-            return "4xx"
-        elif status >= 500:
-            return "5xx"
-        else:
-            return "error"
-
-    def test_all_urls(self):
-        self.state["is_processing"] = True
-        self.state["status_counts"] = {"2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0, "error": 0}
-        
-        results = []
-        urls_to_test = self.state["urls"]
-        
-        if not urls_to_test:
-            st.warning("No URLs found to test")
-            self.state["is_processing"] = False
-            return []
-            
-        # Create progress indicators
-        total_urls = len(urls_to_test)
-        progress_bar = st.progress(0)
-        progress_text = st.empty()
-        
-        try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=self.state["concurrent_requests"]) as executor:
-                future_to_url = {executor.submit(self.test_url, url_data): url_data for url_data in urls_to_test}
-                
-                completed = 0
-                for future in concurrent.futures.as_completed(future_to_url):
-                    try:
-                        result = future.result(timeout=self.state["timeout"] + 5)
-                        results.append(result)
-                    except Exception as exc:
-                        url_data = future_to_url[future]
-                        results.append({
-                            "url": url_data["url"],
-                            "status_code": "Error",
-                            "response_time": 0,
-                            "redirected": False,
-                            "final_url": None,
-                            "status_group": "error",
-                            "error": str(exc)
-                        })
-                        self.state["status_counts"]["error"] += 1
-                    
-                    # Update progress
-                    completed += 1
-                    progress = completed / total_urls
-                    progress_bar.progress(progress)
-                    progress_text.text(f"Testing URLs: {completed}/{total_urls}")
-        except Exception as e:
-            st.error(f"Error during testing: {str(e)}")
-        finally:
-            # Clean up
-            progress_bar.empty()
-            progress_text.empty()
-            
-            # Sort results
-            if urls_to_test and results:
-                url_order = {url_data["url"]: i for i, url_data in enumerate(urls_to_test)}
-                results.sort(key=lambda x: url_order.get(x["url"], 999999))
-            
-            self.state["validation_results"] = results
-            self.state["is_processing"] = False
-            
-            return results
-    
-    def check_robots_txt(self, url):
-        try:
-            parsed_url = urlparse(url)
-            origin = f"{parsed_url.scheme}://{parsed_url.netloc}"
-            robots_url = f"{origin}/robots.txt"
-            
-            response = requests.get(robots_url, timeout=5)
-            if response.status_code != 200:
-                return {
-                    "found": False,
-                    "content": None,
-                    "sitemaps": [],
-                    "sitemap_declared": False
-                }
-            
-            robots_content = response.text
-            
-            # Extract sitemap declarations
-            sitemap_matches = re.findall(r'Sitemap:\s*(https?://[^\s]+)', robots_content, re.IGNORECASE)
-            sitemap_declared = url in sitemap_matches if sitemap_matches else False
-            
-            return {
-                "found": True,
-                "content": robots_content,
-                "sitemaps": sitemap_matches,
-                "sitemap_declared": sitemap_declared
-            }
-        
-        except Exception as e:
-            return {
-                "found": False,
-                "content": f"Error: {str(e)}",
-                "sitemaps": [],
-                "sitemap_declared": False
-            }
-    
-    def analyze_performance(self, results):
-        if not results:
-            return {
-                "avg_response_time": 0,
-                "status_distribution": {
-                    "2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0, "error": 0
-                },
-                "performance_score": 0,
-                "recommendations": ["No data available for performance analysis"]
-            }
-        
-        # Calculate metrics
-        total_responses = len(results)
-        valid_response_times = [r["response_time"] for r in results if isinstance(r["response_time"], (int, float))]
-        
-        avg_time = sum(valid_response_times) / len(valid_response_times) if valid_response_times else 0
-        
-        # Status distribution
-        status_distribution = {
-            "2xx": sum(1 for r in results if r["status_group"] == "2xx"),
-            "3xx": sum(1 for r in results if r["status_group"] == "3xx"),
-            "4xx": sum(1 for r in results if r["status_group"] == "4xx"),
-            "5xx": sum(1 for r in results if r["status_group"] == "5xx"),
-            "error": sum(1 for r in results if r["status_group"] == "error")
-        }
-        
-        # Calculate performance score
-        performance_score = 100
-        
-        # Reduce for response time
-        if avg_time > 200:
-            performance_score -= min(30, (avg_time - 200) / 30)
-        
-        # Reduce for errors
-        error_rate = (status_distribution["4xx"] + status_distribution["5xx"] + status_distribution["error"]) / total_responses
-        performance_score -= min(30, error_rate * 100)
-        
-        # Reduce for redirects
-        redirect_rate = status_distribution["3xx"] / total_responses
-        performance_score -= min(20, redirect_rate * 50)
-        
-        performance_score = max(0, min(100, round(performance_score)))
-        
-        # Recommendations
-        recommendations = []
-        
-        if avg_time > 500:
-            recommendations.append('Response times are high. Consider optimizing server performance or implementing CDN.')
-        
-        if error_rate > 0.05:
-            recommendations.append('Error rate is above 5%. Review and fix broken URLs.')
-        
-        if redirect_rate > 0.1:
-            recommendations.append('Redirect rate is above 10%. Update sitemap with direct URLs to reduce redirects.')
-        
-        return {
-            "avg_response_time": round(avg_time),
-            "status_distribution": status_distribution,
-            "performance_score": performance_score,
-            "recommendations": recommendations
-        }
-
-    def calculate_health_score(self, results):
-        if not results:
-            return 0
-        
-        total_urls = len(results)
-        valid_urls = sum(1 for r in results if r["status_group"] == "2xx")
-        
-        return round((valid_urls / total_urls) * 100) if total_urls > 0 else 0
-
-    def find_slowest_urls(self, results, n=5):
-        valid_results = [r for r in results if isinstance(r["response_time"], (int, float))]
-        if not valid_results:
-            return []
-        
-        sorted_results = sorted(valid_results, key=lambda r: r["response_time"], reverse=True)
-        return sorted_results[:n]
-
-    def format_xml(self, xml_content):
-        try:
-            from xml.dom import minidom
-            parsed = minidom.parseString(xml_content)
-            return parsed.toprettyxml(indent="  ")
-        except:
-            # Simple formatting fallback
-            formatted = ''
-            indent = ''
-            tab = '  '
-            
-            for line in xml_content.split('\n'):
-                if '</' in line:
-                    indent = indent[:-len(tab)]
-                
-                formatted += indent + line + '\n'
-                
-                if '>' in line and not '/>' in line and not '</' in line:
-                    indent += tab
-            
-            return formatted
-
-    def get_url_domain(self, url):
-        try:
-            parsed_url = urlparse(url)
-            return parsed_url.netloc
-        except:
-            return None
-    
-    def find_replace_xml(self, xml_content, find_text, replace_text, use_regex=False):
-        try:
-            if use_regex:
-                modified = re.sub(find_text, replace_text, xml_content)
-            else:
-                modified = xml_content.replace(find_text, replace_text)
-            
-            # Count replacements
-            if use_regex:
-                count = len(re.findall(find_text, xml_content))
-            else:
-                count = xml_content.count(find_text)
-            
-            return {
-                "modified_content": modified,
-                "count": count
-            }
-        except Exception as e:
-            return {
-                "error": str(e),
-                "modified_content": xml_content,
-                "count": 0
-            }
