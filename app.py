@@ -332,7 +332,12 @@ class SitemapValidator:
             }
             
             start_time = time.time()
-            response = requests.head(url, headers=headers, timeout=self.state["timeout"], allow_redirects=True)
+            # Use GET instead of HEAD as some servers don't properly handle HEAD requests
+            # Set a short timeout to prevent hanging
+            response = requests.get(url, headers=headers, timeout=self.state["timeout"], 
+                                   allow_redirects=True, stream=True)
+            # Just get headers without downloading the entire content
+            response.close()
             end_time = time.time()
             
             response_time = round((end_time - start_time) * 1000)  # Convert to ms
@@ -392,34 +397,50 @@ class SitemapValidator:
             return "error"
 
     def test_all_urls(self):
-        """Test all URLs with concurrency"""
+        """Test all URLs with concurrency - this version is kept for backward compatibility"""
         self.state["is_processing"] = True
         self.state["status_counts"] = {"2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0, "error": 0}
         
         results = []
         
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.state["concurrent_requests"]) as executor:
-            future_to_url = {executor.submit(self.test_url, url_data): url_data for url_data in self.state["urls"]}
-            
-            # Create a progress bar
-            total_urls = len(self.state["urls"])
-            progress_bar = st.progress(0)
-            progress_text = st.empty()
-            
-            completed = 0
-            for future in concurrent.futures.as_completed(future_to_url):
-                result = future.result()
-                results.append(result)
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self.state["concurrent_requests"]) as executor:
+                future_to_url = {executor.submit(self.test_url, url_data): url_data for url_data in self.state["urls"]}
                 
-                # Update progress
-                completed += 1
-                progress = completed / total_urls
-                progress_bar.progress(progress)
-                progress_text.text(f"Testing URLs: {completed}/{total_urls}")
-        
-        # Clear progress elements
-        progress_bar.empty()
-        progress_text.empty()
+                # Create a progress bar
+                total_urls = len(self.state["urls"])
+                progress_bar = st.progress(0)
+                progress_text = st.empty()
+                
+                completed = 0
+                for future in concurrent.futures.as_completed(future_to_url):
+                    try:
+                        result = future.result()
+                        results.append(result)
+                    except Exception as e:
+                        # Handle unexpected errors
+                        url_data = future_to_url[future]
+                        results.append({
+                            "url": url_data.get("url", "Unknown URL"),
+                            "status_code": "Error",
+                            "response_time": 0,
+                            "redirected": False,
+                            "final_url": None,
+                            "status_group": "error",
+                            "error": str(e)
+                        })
+                    
+                    # Update progress
+                    completed += 1
+                    progress = completed / total_urls
+                    progress_bar.progress(progress)
+                    progress_text.text(f"Testing URLs: {completed}/{total_urls}")
+            
+            # Clear progress elements
+            progress_bar.empty()
+            progress_text.empty()
+        except Exception as e:
+            st.error(f"Error testing URLs: {str(e)}")
         
         self.state["validation_results"] = results
         self.state["is_processing"] = False
@@ -890,11 +911,57 @@ def main():
                 col1, col2 = st.columns([1, 3])
                 
                 with col1:
-                    if st.button("🧪 Test All URLs", use_container_width=True):
-                        with st.spinner("Testing URLs..."):
-                            results = validator.test_all_urls()
-                            st.session_state.sitemap_data["validation_results"] = results
-                            st.success(f"Tested {len(results)} URLs")
+                    test_button_col, download_col = st.columns([3, 1])
+                with test_button_col:
+                    if st.button("🧪 Test All URLs", use_container_width=True, key="test_urls_button"):
+                        # Reset status counts before testing
+                        validator.state["status_counts"] = {"2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0, "error": 0}
+                        
+                        # Create placeholder for progress
+                        progress_placeholder = st.empty()
+                        progress_bar = progress_placeholder.progress(0)
+                        status_placeholder = st.empty()
+                        
+                        # Start testing with progress updates
+                        total_urls = len(urls)
+                        results = []
+                        
+                        # Use ThreadPoolExecutor for concurrent requests
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=validator.state["concurrent_requests"]) as executor:
+                            future_to_url = {executor.submit(validator.test_url, url): url for url in urls}
+                            
+                            for i, future in enumerate(concurrent.futures.as_completed(future_to_url)):
+                                try:
+                                    result = future.result()
+                                    results.append(result)
+                                except Exception as e:
+                                    # Handle any unexpected errors
+                                    url = future_to_url[future]["url"] if "url" in future_to_url[future] else "Unknown URL"
+                                    results.append({
+                                        "url": url,
+                                        "status_code": "Error",
+                                        "response_time": 0,
+                                        "redirected": False,
+                                        "final_url": None,
+                                        "status_group": "error",
+                                        "error": str(e)
+                                    })
+                                
+                                # Update progress
+                                progress = (i + 1) / total_urls
+                                progress_bar.progress(progress)
+                                status_placeholder.text(f"Testing URLs: {i + 1}/{total_urls}")
+                        
+                        # Clear progress indicators
+                        progress_placeholder.empty()
+                        status_placeholder.empty()
+                        
+                        # Store results and update UI
+                        st.session_state.sitemap_data["validation_results"] = results
+                        st.success(f"Tested {len(results)} URLs")
+                        
+                        # Force a rerun to refresh the UI with the results
+                        st.experimental_rerun()
                 
                 # Display results if available
                 results = st.session_state.sitemap_data.get("validation_results")
