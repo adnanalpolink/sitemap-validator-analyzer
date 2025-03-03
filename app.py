@@ -102,6 +102,10 @@ class SitemapValidator:
     def detect_sitemaps(self, url):
         """Detect sitemap from a given URL by checking robots.txt and common patterns"""
         try:
+            # Clean and validate URL
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
+                
             # Parse the base URL
             parsed_url = urlparse(url)
             origin = f"{parsed_url.scheme}://{parsed_url.netloc}"
@@ -110,46 +114,76 @@ class SitemapValidator:
             sitemap_urls = []
             
             # Check robots.txt first
+            robots_found = False
             try:
                 robots_url = f"{origin}/robots.txt"
                 response = requests.get(robots_url, timeout=5)
                 if response.status_code == 200:
+                    robots_found = True
                     robots_text = response.text
                     # Extract sitemap URLs using regex
                     sitemap_matches = re.findall(r'Sitemap:\s*(https?://[^\s]+)', robots_text, re.IGNORECASE)
                     if sitemap_matches:
-                        sitemap_urls.extend(sitemap_matches)
-            except:
-                pass
+                        for match in sitemap_matches:
+                            sitemap_urls.append(match.strip())
+                        st.info(f"Found {len(sitemap_matches)} sitemaps declared in robots.txt")
+            except Exception as robots_error:
+                st.warning(f"Could not check robots.txt: {str(robots_error)}")
             
-            # Common sitemap patterns to check
-            sitemap_patterns = [
-                '/sitemap.xml',
-                '/sitemap_index.xml',
-                '/sitemap-index.xml',
-                '/post-sitemap.xml',
-                '/page-sitemap.xml',
-                '/product-sitemap.xml',
-                '/category-sitemap.xml',
-                '/wp-sitemap.xml',
-                '/sitemap.php',
-                '/sitemap.txt'
-            ]
-            
-            # If no sitemaps found in robots.txt, try common patterns
-            if not sitemap_urls:
+            # If robots.txt was not found or had no sitemaps, try common patterns
+            if not robots_found or not sitemap_urls:
+                # Common sitemap patterns to check
+                sitemap_patterns = [
+                    '/sitemap.xml',
+                    '/sitemap_index.xml',
+                    '/sitemap-index.xml',
+                    '/post-sitemap.xml',
+                    '/page-sitemap.xml',
+                    '/product-sitemap.xml',
+                    '/category-sitemap.xml',
+                    '/wp-sitemap.xml',
+                    '/sitemap.php',
+                    '/sitemap.txt'
+                ]
+                
+                # Check each pattern
                 for pattern in sitemap_patterns:
-                    sitemap_url = f"{origin}{pattern}"
                     try:
+                        sitemap_url = f"{origin}{pattern}"
                         response = requests.head(sitemap_url, timeout=3)
                         if response.status_code == 200:
                             sitemap_urls.append(sitemap_url)
+                        # Some servers don't handle HEAD requests correctly, try GET
+                        elif response.status_code == 405:
+                            response = requests.get(
+                                sitemap_url, 
+                                timeout=3, 
+                                stream=True, 
+                                headers={'Range': 'bytes=0-1024'}
+                            )
+                            if response.status_code == 200:
+                                sitemap_urls.append(sitemap_url)
+                            response.close()
                     except:
                         continue
+            
+            # Deduplicate urls
+            sitemap_urls = list(dict.fromkeys(sitemap_urls))
+            
+            # If the original URL is a sitemap itself, add it
+            if url.endswith('.xml') and url not in sitemap_urls:
+                try:
+                    response = requests.head(url, timeout=3)
+                    if response.status_code == 200:
+                        sitemap_urls.append(url)
+                except:
+                    pass
             
             return sitemap_urls
         except Exception as e:
             st.error(f"Error detecting sitemaps: {str(e)}")
+            if st.session_state.debug_mode:
+                st.exception(e)
             return []
 
     def load_sitemap(self, url):
@@ -1588,6 +1622,34 @@ def main():
                 for recommendation in general_recommendations:
                     st.markdown(f"- {recommendation}")
 
+    # Add debug toggle in an expander at the bottom
+    with st.expander("Advanced Options", expanded=False):
+        debug_col1, debug_col2 = st.columns(2)
+        
+        with debug_col1:
+            st.session_state.debug_mode = st.checkbox("Enable Debug Mode", value=st.session_state.debug_mode)
+            
+        with debug_col2:
+            if st.button("Clear Session State"):
+                for key in list(st.session_state.keys()):
+                    del st.session_state[key]
+                st.experimental_rerun()
+                
+        if st.session_state.debug_mode:
+            st.subheader("Debug Info")
+            
+            # Show validator state
+            if st.session_state.validator and st.session_state.validator.state:
+                st.json(st.session_state.validator.state)
+            
+            # Show session state
+            st.write("Session State:")
+            st.write({k: v for k, v in st.session_state.items() if k not in ['sitemap_data', 'validator']})
+            
+            # Show URLs from validator
+            if st.session_state.validator and st.session_state.validator.state.get("urls"):
+                st.write(f"Validator has {len(st.session_state.validator.state['urls'])} URLs")
+                
     # Footer
     st.markdown("""
     <div class="footer">
