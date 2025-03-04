@@ -44,25 +44,25 @@ st.markdown("""
         font-weight: 700;
         font-size: 2.25rem;
         margin-bottom: 0.75rem;
-        color: #1E293B;
+        color: #000000;
     }
     
     h2 {
         font-weight: 600;
         font-size: 1.5rem;
         margin-bottom: 0.5rem;
-        color: #334155;
+        color: #000000;
     }
     
     h3 {
         font-weight: 600;
         font-size: 1.25rem;
         margin-bottom: 0.5rem;
-        color: #475569;
+        color: #000000;
     }
     
     p {
-        color: #64748B;
+        color: #000000;
     }
     
     /* Cards and containers */
