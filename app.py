@@ -306,15 +306,46 @@ st.markdown("""
     .stTextInput > label,
     .stSlider > label,
     .stSelectbox > label {
-        color: #475569;
+        color: #000000;
         font-weight: 500;
         font-size: 0.875rem;
+    }
+    
+    /* Ensure all text is visible across themes */
+    .st-emotion-cache-ue6h4q, .st-emotion-cache-10trblm, .st-emotion-cache-q8sbsg p {
+        color: #000000 !important;
+    }
+    
+    .st-emotion-cache-1gulkj5 {
+        color: #000000;
+    }
+    
+    /* Fix for Streamlit default text colors */
+    div.stMarkdown p, div.stMarkdown span, div.stMarkdown li {
+        color: #000000 !important;
+    }
+    
+    /* Make metric labels visible */
+    div[data-testid="stMetricLabel"] {
+        color: #000000 !important;
     }
     
     /* Dark mode adjustments */
     @media (prefers-color-scheme: dark) {
         h1, h2, h3, p {
-            color: #E2E8F0;
+            color: #FFFFFF !important;
+        }
+        
+        .small-info {
+            color: #E2E8F0 !important;
+        }
+        
+        div.stMarkdown p, div.stMarkdown span, div.stMarkdown li {
+            color: #FFFFFF !important;
+        }
+        
+        div[data-testid="stMetricLabel"] {
+            color: #FFFFFF !important;
         }
         
         .card {
@@ -328,13 +359,13 @@ st.markdown("""
         
         .dataframe th {
             background-color: #0F172A;
-            color: #E2E8F0;
+            color: #FFFFFF;
             border-bottom-color: #334155;
         }
         
         .dataframe td {
             border-bottom-color: #334155;
-            color: #E2E8F0;
+            color: #FFFFFF;
         }
         
         .dataframe tr:hover td {
@@ -895,7 +926,7 @@ def main():
         <div style="font-size: 2.5rem; margin-right: 0.5rem;">🌐</div>
         <div>
             <h1 style="margin: 0; padding: 0;">Sitemap Validator & Analyzer</h1>
-            <p style="margin: 0; padding: 0; color: #64748B;">Validate, test, and analyze XML sitemaps to improve SEO and website health</p>
+            <p style="margin: 0; padding: 0; color: #000000;">Validate, test, and analyze XML sitemaps to improve SEO and website health</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -1623,7 +1654,7 @@ def main():
                         delta_color="normal"
                     )
                     st.markdown(
-                        "<span class='small-info'>Percentage of URLs that return a successful status code</span>",
+                        "<span style='font-size: 0.875rem; color: #000000;'>Percentage of URLs that return a successful status code</span>",
                         unsafe_allow_html=True
                     )
                 
@@ -1635,7 +1666,7 @@ def main():
                         delta_color="normal"
                     )
                     st.markdown(
-                        "<span class='small-info'>Based on response times, error rates, and redirects</span>",
+                        "<span style='font-size: 0.875rem; color: #000000;'>Based on response times, error rates, and redirects</span>",
                         unsafe_allow_html=True
                     )
                 
@@ -1648,7 +1679,7 @@ def main():
                         delta_color="normal"
                     )
                     st.markdown(
-                        "<span class='small-info'>Average time to respond across all URLs</span>",
+                        "<span style='font-size: 0.875rem; color: #000000;'>Average time to respond across all URLs</span>",
                         unsafe_allow_html=True
                     )
                 
