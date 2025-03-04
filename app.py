@@ -15,72 +15,331 @@ import numpy as np
 from urllib.parse import urlparse
 import base64
 
-st.set_page_config(page_title="Sitemap Validator & Analyzer", layout="wide", page_icon="🌐")
+# Page configuration
+st.set_page_config(
+    page_title="Sitemap Validator & Analyzer",
+    layout="wide",
+    page_icon="🌐",
+    initial_sidebar_state="collapsed"
+)
 
-# Custom CSS
+# Modern UI enhancements with CSS
 st.markdown("""
 <style>
+    /* Global styling */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
+    
+    /* Main container */
     .main .block-container {
-        padding-top: 2rem;
+        padding-top: 1rem;
+        max-width: 95%;
     }
-    h1, h2, h3 {
+    
+    /* Typography */
+    h1 {
+        font-weight: 700;
+        font-size: 2.25rem;
+        margin-bottom: 0.75rem;
+        color: #1E293B;
+    }
+    
+    h2 {
+        font-weight: 600;
+        font-size: 1.5rem;
         margin-bottom: 0.5rem;
+        color: #334155;
     }
+    
+    h3 {
+        font-weight: 600;
+        font-size: 1.25rem;
+        margin-bottom: 0.5rem;
+        color: #475569;
+    }
+    
+    p {
+        color: #64748B;
+    }
+    
+    /* Cards and containers */
+    .card {
+        background-color: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        margin-bottom: 1.5rem;
+        border: 1px solid #F1F5F9;
+    }
+    
+    /* Tabs styling */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 2px;
+        gap: 8px;
+        background-color: transparent;
+        border-bottom: 1px solid #E2E8F0;
+        padding-bottom: 0px;
     }
+    
     .stTabs [data-baseweb="tab"] {
-        height: 50px;
+        height: 48px;
         white-space: pre-wrap;
-        background-color: #f0f2f6;
-        border-radius: 4px 4px 0 0;
-        gap: 1px;
-        padding-top: 10px;
-        padding-bottom: 10px;
+        background-color: transparent;
+        border-radius: 8px 8px 0 0;
+        gap: 8px;
+        padding: 12px 16px;
+        font-weight: 500;
+        color: #64748B;
+        border: none;
     }
+    
     .stTabs [aria-selected="true"] {
-        background-color: #ffffff;
-        border-radius: 4px 4px 0 0;
-        border-right: 1px solid #e0e0e0;
-        border-left: 1px solid #e0e0e0;
-        border-top: 1px solid #e0e0e0;
+        background-color: white;
+        color: #3B82F6;
+        border-bottom: 2px solid #3B82F6;
+        font-weight: 600;
     }
+    
+    /* Metrics */
     div[data-testid="stMetricValue"] {
-        font-size: 28px;
+        font-size: 24px;
+        font-weight: 600;
     }
+    
+    div[data-testid="stMetricLabel"] {
+        font-size: 14px;
+        color: #64748B;
+    }
+    
+    div[data-testid="stMetricDelta"] {
+        font-size: 14px;
+    }
+    
+    /* Status indicators */
     .status-ok {
-        background-color: #d1ffd7;
-        padding: 0.2rem 0.5rem;
-        border-radius: 4px;
-        font-weight: bold;
-        color: #0a7b1e;
+        background-color: #ECFDF5;
+        padding: 0.25rem 0.5rem;
+        border-radius: 6px;
+        font-weight: 500;
+        color: #10B981;
     }
+    
     .status-warning {
-        background-color: #fff7d1;
-        padding: 0.2rem 0.5rem;
-        border-radius: 4px;
-        font-weight: bold;
-        color: #8a6b00;
+        background-color: #FFFBEB;
+        padding: 0.25rem 0.5rem;
+        border-radius: 6px;
+        font-weight: 500;
+        color: #F59E0B;
     }
+    
     .status-error {
-        background-color: #ffd1d1;
-        padding: 0.2rem 0.5rem;
-        border-radius: 4px;
-        font-weight: bold;
-        color: #a70000;
+        background-color: #FEF2F2;
+        padding: 0.25rem 0.5rem;
+        border-radius: 6px;
+        font-weight: 500;
+        color: #EF4444;
     }
+    
+    /* Form elements */
+    div[data-baseweb="input"] {
+        border-radius: 8px;
+    }
+    
+    button[kind="primary"] {
+        border-radius: 8px;
+        background-color: #3B82F6;
+        border: none;
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+    }
+    
+    button[kind="primary"]:hover {
+        background-color: #2563EB;
+    }
+    
+    button[kind="secondary"] {
+        border-radius: 8px;
+        background-color: white;
+        border: 1px solid #E2E8F0;
+        color: #475569;
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+    }
+    
+    button[kind="secondary"]:hover {
+        background-color: #F8FAFC;
+    }
+    
+    .stSlider > div > div > div {
+        background-color: #F1F5F9;
+    }
+    
+    .stSlider > div > div > div > div {
+        background-color: #3B82F6;
+    }
+    
+    .stProgress > div > div > div > div {
+        background-color: #3B82F6;
+    }
+    
+    /* Tables and dataframes */
+    .dataframe {
+        border-collapse: separate;
+        border-spacing: 0;
+        width: 100%;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid #E2E8F0;
+    }
+    
+    .dataframe th {
+        background-color: #F8FAFC;
+        padding: 12px 16px;
+        text-align: left;
+        font-weight: 600;
+        color: #475569;
+        border-bottom: 1px solid #E2E8F0;
+        white-space: nowrap;
+    }
+    
+    .dataframe td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #E2E8F0;
+        color: #334155;
+    }
+    
+    .dataframe tr:last-child td {
+        border-bottom: none;
+    }
+    
+    .dataframe tr:hover td {
+        background-color: #F8FAFC;
+    }
+    
+    /* Expandable sections */
+    details {
+        margin-bottom: 1rem;
+        border-radius: 8px;
+        border: 1px solid #E2E8F0;
+        overflow: hidden;
+    }
+    
+    summary {
+        padding: 1rem;
+        background-color: #F8FAFC;
+        font-weight: 500;
+        cursor: pointer;
+    }
+    
+    details[open] summary {
+        border-bottom: 1px solid #E2E8F0;
+    }
+    
+    details > div {
+        padding: 1rem;
+    }
+
+    /* Other elements */
     .small-info {
-        font-size: 0.8rem;
-        color: #666;
+        font-size: 0.875rem;
+        color: #64748B;
     }
+    
     .footer {
         margin-top: 3rem;
         text-align: center;
-        color: #888;
-        font-size: 0.8rem;
+        color: #94A3B8;
+        font-size: 0.875rem;
+        padding: 1.5rem 0;
+        border-top: 1px solid #F1F5F9;
     }
-    .stProgress > div > div > div > div {
-        background-color: #2e7fff;
+    
+    /* Download buttons */
+    .download-button {
+        display: inline-block;
+        background-color: #3B82F6;
+        color: white !important;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 500;
+        margin-top: 0.5rem;
+        transition: background-color 0.2s;
+        text-align: center;
+    }
+    
+    .download-button:hover {
+        background-color: #2563EB;
+    }
+    
+    /* Notification boxes */
+    .stAlert {
+        border-radius: 8px;
+        border: none;
+    }
+    
+    .stAlert > div {
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+    }
+    
+    /* Charts */
+    div.js-plotly-plot {
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    /* Control panel layout */
+    .control-panel {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+    
+    .control-panel > div {
+        flex: 1;
+    }
+    
+    /* Widget labels */
+    .stTextInput > label,
+    .stSlider > label,
+    .stSelectbox > label {
+        color: #475569;
+        font-weight: 500;
+        font-size: 0.875rem;
+    }
+    
+    /* Dark mode adjustments */
+    @media (prefers-color-scheme: dark) {
+        h1, h2, h3, p {
+            color: #E2E8F0;
+        }
+        
+        .card {
+            background-color: #1E293B;
+            border-color: #334155;
+        }
+        
+        .dataframe {
+            border-color: #334155;
+        }
+        
+        .dataframe th {
+            background-color: #0F172A;
+            color: #E2E8F0;
+            border-bottom-color: #334155;
+        }
+        
+        .dataframe td {
+            border-bottom-color: #334155;
+            color: #E2E8F0;
+        }
+        
+        .dataframe tr:hover td {
+            background-color: #1E293B;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -630,8 +889,16 @@ class SitemapValidator:
             }
 
 def main():
-    st.title("🌐 Sitemap Validator & Analyzer")
-    st.markdown("Validate, test, and analyze XML sitemaps to improve SEO and website health.")
+    # Header section with logo and title
+    st.markdown("""
+    <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+        <div style="font-size: 2.5rem; margin-right: 0.5rem;">🌐</div>
+        <div>
+            <h1 style="margin: 0; padding: 0;">Sitemap Validator & Analyzer</h1>
+            <p style="margin: 0; padding: 0; color: #64748B;">Validate, test, and analyze XML sitemaps to improve SEO and website health</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     validator = SitemapValidator()
     
@@ -645,7 +912,10 @@ def main():
             "robots_txt_data": None
         }
     
-    # URL input section
+    # Main card for URL input with modern design
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    
+    # URL input section with improved layout
     col1, col2, col3 = st.columns([3, 1, 1])
     
     with col1:
@@ -699,35 +969,43 @@ def main():
                         
                         st.success(f"Loaded {len(urls)} URLs from sitemap")
     
+    st.markdown('</div>', unsafe_allow_html=True)
+    
     # Only show tabs if sitemap is loaded
     if st.session_state.sitemap_data.get("sitemap_content"):
-        # Settings expander for test configuration
-        with st.expander("⚙️ Test Settings"):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                validator.state["concurrent_requests"] = st.slider(
-                    "Concurrent Requests",
-                    min_value=1,
-                    max_value=20,
-                    value=5,
-                    help="Number of URLs to test simultaneously"
-                )
-            with col2:
-                validator.state["timeout"] = st.slider(
-                    "Request Timeout (seconds)",
-                    min_value=1,
-                    max_value=30,
-                    value=10,
-                    help="Maximum time to wait for each URL response"
-                )
-            with col3:
-                validator.state["user_agent"] = st.text_input(
-                    "User Agent",
-                    value="Mozilla/5.0 (Streamlit Sitemap Validator)",
-                    help="User agent string to use for requests"
-                )
+        # Settings expander with modern design
+        st.markdown('<details class="modern-expander">', unsafe_allow_html=True)
+        st.markdown('<summary>⚙️ Test Settings</summary>', unsafe_allow_html=True)
+        st.markdown('<div style="padding: 1rem;">', unsafe_allow_html=True)
         
-        # Main tabs
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            validator.state["concurrent_requests"] = st.slider(
+                "Concurrent Requests",
+                min_value=1,
+                max_value=20,
+                value=5,
+                help="Number of URLs to test simultaneously"
+            )
+        with col2:
+            validator.state["timeout"] = st.slider(
+                "Request Timeout (seconds)",
+                min_value=1,
+                max_value=30,
+                value=10,
+                help="Maximum time to wait for each URL response"
+            )
+        with col3:
+            validator.state["user_agent"] = st.text_input(
+                "User Agent",
+                value="Mozilla/5.0 (Streamlit Sitemap Validator)",
+                help="User agent string to use for requests"
+            )
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</details>', unsafe_allow_html=True)
+        
+        # Main tabs with modern styling
         tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "📊 Dashboard", 
             "🧪 URL Testing", 
@@ -738,9 +1016,10 @@ def main():
         
         # Dashboard Tab
         with tab1:
+            st.markdown('<div class="card">', unsafe_allow_html=True)
             st.header("Sitemap Dashboard")
             
-            # Overview metrics
+            # Overview metrics with modern cards
             overview_col1, overview_col2, overview_col3, overview_col4 = st.columns(4)
             
             with overview_col1:
@@ -770,28 +1049,58 @@ def main():
                 sitemap_in_robots = "Yes" if robots_data.get("sitemap_declared", False) else "No"
                 st.metric("In Robots.txt", sitemap_in_robots)
             
-            # Status metrics
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Performance metrics if results available
             if st.session_state.sitemap_data.get("validation_results"):
+                st.markdown('<div class="card">', unsafe_allow_html=True)
                 results = st.session_state.sitemap_data.get("validation_results")
                 status_col1, status_col2, status_col3, status_col4 = st.columns(4)
                 
                 with status_col1:
                     health_score = validator.calculate_health_score(results)
-                    st.metric("Health Score", f"{health_score}%")
+                    color = "#10B981" if health_score >= 90 else "#F59E0B" if health_score >= 70 else "#EF4444"
+                    st.metric(
+                        "Health Score", 
+                        f"{health_score}%",
+                        delta=None,
+                        delta_color="normal"
+                    )
                 
                 with status_col2:
                     performance_data = validator.analyze_performance(results)
-                    st.metric("Performance Score", f"{performance_data['performance_score']}%")
+                    score_color = "#10B981" if performance_data['performance_score'] >= 90 else "#F59E0B" if performance_data['performance_score'] >= 70 else "#EF4444"
+                    st.metric(
+                        "Performance Score", 
+                        f"{performance_data['performance_score']}%",
+                        delta=None,
+                        delta_color="normal"
+                    )
                 
                 with status_col3:
                     avg_response = performance_data['avg_response_time']
-                    st.metric("Avg Response Time", f"{avg_response} ms")
+                    resp_color = "#10B981" if avg_response < 200 else "#F59E0B" if avg_response < 500 else "#EF4444"
+                    st.metric(
+                        "Avg Response Time", 
+                        f"{avg_response} ms",
+                        delta=None,
+                        delta_color="normal"
+                    )
                 
                 with status_col4:
                     redirect_count = sum(1 for r in results if r["redirected"])
-                    st.metric("Redirects", redirect_count)
+                    redirect_pct = round((redirect_count / len(results)) * 100)
+                    st.metric(
+                        "Redirects", 
+                        f"{redirect_count} ({redirect_pct}%)",
+                        delta=None,
+                        delta_color="normal"
+                    )
                 
-                # Status distribution chart
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Status distribution chart with enhanced styling
+                st.markdown('<div class="card">', unsafe_allow_html=True)
                 st.subheader("Status Code Distribution")
                 
                 status_data = {
@@ -812,11 +1121,11 @@ def main():
                     y="Count",
                     color="Status",
                     color_discrete_map={
-                        "Success (2xx)": "#2ecc71",
-                        "Redirects (3xx)": "#f39c12",
-                        "Client Errors (4xx)": "#e74c3c",
-                        "Server Errors (5xx)": "#c0392b",
-                        "Errors": "#7f8c8d"
+                        "Success (2xx)": "#10B981",
+                        "Redirects (3xx)": "#F59E0B",
+                        "Client Errors (4xx)": "#EF4444",
+                        "Server Errors (5xx)": "#DC2626",
+                        "Errors": "#6B7280"
                     }
                 )
                 fig.update_layout(
@@ -826,17 +1135,31 @@ def main():
                     plot_bgcolor='rgba(0,0,0,0)',
                     xaxis_title="",
                     yaxis_title="",
-                    showlegend=False
+                    showlegend=False,
+                    xaxis=dict(
+                        tickfont=dict(size=12),
+                        tickangle=0
+                    ),
+                    yaxis=dict(
+                        tickfont=dict(size=12)
+                    )
                 )
                 st.plotly_chart(fig, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
                 
-                # Recommendations
+                # Recommendations card
                 if performance_data["recommendations"]:
+                    st.markdown('<div class="card">', unsafe_allow_html=True)
                     st.subheader("Recommendations")
                     for recommendation in performance_data["recommendations"]:
-                        st.markdown(f"- {recommendation}")
+                        st.markdown(f'<div style="display: flex; align-items: flex-start; margin-bottom: 0.75rem;">'
+                                    f'<div style="color: #3B82F6; margin-right: 0.5rem;">●</div>'
+                                    f'<div>{recommendation}</div>'
+                                    f'</div>', unsafe_allow_html=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
                 
-                # Show slowest URLs
+                # Show slowest URLs with modern styling
+                st.markdown('<div class="card">', unsafe_allow_html=True)
                 st.subheader("Slowest URLs")
                 slowest_urls = validator.find_slowest_urls(results)
                 if slowest_urls:
@@ -851,10 +1174,12 @@ def main():
                     st.dataframe(pd.DataFrame(slow_data), use_container_width=True)
                 else:
                     st.info("No response time data available.")
+                st.markdown('</div>', unsafe_allow_html=True)
             else:
                 st.info("Run URL testing to see performance metrics.")
             
-            # Quick sitemap stats
+            # Sitemap structure in a clean card
+            st.markdown('<div class="card">', unsafe_allow_html=True)
             st.subheader("Sitemap Structure")
             
             urls = st.session_state.sitemap_data.get("urls", [])
@@ -880,27 +1205,49 @@ def main():
             stats_col1, stats_col2 = st.columns(2)
             
             with stats_col1:
-                st.markdown("**Media Resources**")
-                st.markdown(f"- Images: {total_images}")
-                st.markdown(f"- Videos: {total_videos}")
+                st.markdown('<div style="background-color: #F8FAFC; padding: 1rem; border-radius: 8px;">', unsafe_allow_html=True)
+                st.markdown('<span style="font-weight: 600; color: #334155;">Media Resources</span>', unsafe_allow_html=True)
+                st.markdown(f'<div style="display: flex; justify-content: space-between; margin-top: 0.5rem;">'
+                            f'<div>Images:</div>'
+                            f'<div style="font-weight: 500;">{total_images}</div>'
+                            f'</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="display: flex; justify-content: space-between; margin-top: 0.5rem;">'
+                            f'<div>Videos:</div>'
+                            f'<div style="font-weight: 500;">{total_videos}</div>'
+                            f'</div>', unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
                 
-                st.markdown("**Priority Distribution**")
+                st.markdown('<div style="background-color: #F8FAFC; padding: 1rem; border-radius: 8px; margin-top: 1rem;">', unsafe_allow_html=True)
+                st.markdown('<span style="font-weight: 600; color: #334155;">Priority Distribution</span>', unsafe_allow_html=True)
                 if priorities:
                     for priority, count in sorted(priorities.items(), key=lambda x: float(x[0]), reverse=True):
-                        st.markdown(f"- Priority {priority}: {count} URLs")
+                        st.markdown(f'<div style="display: flex; justify-content: space-between; margin-top: 0.5rem;">'
+                                    f'<div>Priority {priority}:</div>'
+                                    f'<div style="font-weight: 500;">{count} URLs</div>'
+                                    f'</div>', unsafe_allow_html=True)
                 else:
-                    st.markdown("- No priority values found")
+                    st.markdown('<div style="margin-top: 0.5rem; color: #64748B;">No priority values found</div>', unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
             
             with stats_col2:
-                st.markdown("**Domain Distribution**")
+                st.markdown('<div style="background-color: #F8FAFC; padding: 1rem; border-radius: 8px;">', unsafe_allow_html=True)
+                st.markdown('<span style="font-weight: 600; color: #334155;">Domain Distribution</span>', unsafe_allow_html=True)
                 if len(domains) > 1:
                     for domain, count in sorted(domains.items(), key=lambda x: x[1], reverse=True):
-                        st.markdown(f"- {domain}: {count} URLs")
+                        st.markdown(f'<div style="display: flex; justify-content: space-between; margin-top: 0.5rem;">'
+                                    f'<div style="word-break: break-all;">{domain}:</div>'
+                                    f'<div style="font-weight: 500; margin-left: 0.5rem;">{count} URLs</div>'
+                                    f'</div>', unsafe_allow_html=True)
                 else:
-                    st.markdown(f"- All URLs on same domain: {list(domains.keys())[0] if domains else 'N/A'}")
+                    single_domain = list(domains.keys())[0] if domains else 'N/A'
+                    st.markdown(f'<div style="margin-top: 0.5rem; color: #64748B;">All URLs on same domain: {single_domain}</div>', unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+            st.markdown('</div>', unsafe_allow_html=True)
         
         # URL Testing Tab
         with tab2:
+            st.markdown('<div class="card">', unsafe_allow_html=True)
             st.header("URL Testing")
             
             urls = st.session_state.sitemap_data.get("urls", [])
@@ -911,13 +1258,11 @@ def main():
                 col1, col2 = st.columns([1, 3])
                 
                 with col1:
-                    test_button_col, download_col = st.columns([3, 1])
-                with test_button_col:
                     if st.button("🧪 Test All URLs", use_container_width=True, key="test_urls_button"):
                         # Reset status counts before testing
                         validator.state["status_counts"] = {"2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0, "error": 0}
                         
-                        # Create placeholder for progress
+                        # Create placeholder for progress with better styling
                         progress_placeholder = st.empty()
                         progress_bar = progress_placeholder.progress(0)
                         status_placeholder = st.empty()
@@ -967,7 +1312,7 @@ def main():
                 results = st.session_state.sitemap_data.get("validation_results")
                 
                 if results:
-                    # Status counts
+                    # Status counts with modern badges
                     status_counts = {
                         "2xx": sum(1 for r in results if r["status_group"] == "2xx"),
                         "3xx": sum(1 for r in results if r["status_group"] == "3xx"),
@@ -976,18 +1321,30 @@ def main():
                         "error": sum(1 for r in results if r["status_group"] == "error")
                     }
                     
-                    # Display counts
-                    count_cols = st.columns(5)
-                    with count_cols[0]:
-                        st.markdown(f"**Success:** {status_counts['2xx']}")
-                    with count_cols[1]:
-                        st.markdown(f"**Redirects:** {status_counts['3xx']}")
-                    with count_cols[2]:
-                        st.markdown(f"**Client Errors:** {status_counts['4xx']}")
-                    with count_cols[3]:
-                        st.markdown(f"**Server Errors:** {status_counts['5xx']}")
-                    with count_cols[4]:
-                        st.markdown(f"**Other Errors:** {status_counts['error']}")
+                    # Display counts with better styling
+                    st.markdown('<div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;">', unsafe_allow_html=True)
+                    
+                    st.markdown(f'<div style="background-color: #ECFDF5; padding: 0.5rem 1rem; border-radius: 8px;">'
+                                f'<span style="font-weight: 500; color: #10B981;">Success:</span> <span style="font-weight: 600;">{status_counts["2xx"]}</span>'
+                                f'</div>', unsafe_allow_html=True)
+                    
+                    st.markdown(f'<div style="background-color: #FFFBEB; padding: 0.5rem 1rem; border-radius: 8px;">'
+                                f'<span style="font-weight: 500; color: #F59E0B;">Redirects:</span> <span style="font-weight: 600;">{status_counts["3xx"]}</span>'
+                                f'</div>', unsafe_allow_html=True)
+                    
+                    st.markdown(f'<div style="background-color: #FEE2E2; padding: 0.5rem 1rem; border-radius: 8px;">'
+                                f'<span style="font-weight: 500; color: #EF4444;">Client Errors:</span> <span style="font-weight: 600;">{status_counts["4xx"]}</span>'
+                                f'</div>', unsafe_allow_html=True)
+                    
+                    st.markdown(f'<div style="background-color: #FEE2E2; padding: 0.5rem 1rem; border-radius: 8px;">'
+                                f'<span style="font-weight: 500; color: #DC2626;">Server Errors:</span> <span style="font-weight: 600;">{status_counts["5xx"]}</span>'
+                                f'</div>', unsafe_allow_html=True)
+                    
+                    st.markdown(f'<div style="background-color: #F3F4F6; padding: 0.5rem 1rem; border-radius: 8px;">'
+                                f'<span style="font-weight: 500; color: #6B7280;">Other Errors:</span> <span style="font-weight: 600;">{status_counts["error"]}</span>'
+                                f'</div>', unsafe_allow_html=True)
+                    
+                    st.markdown('</div>', unsafe_allow_html=True)
                     
                     # Create DataFrame for results
                     data = []
@@ -1027,8 +1384,12 @@ def main():
                     # Create DataFrame
                     df = pd.DataFrame(data)
                     
-                    # Add search filter
-                    search_term = st.text_input("🔍 Filter URLs", placeholder="Search by domain, path, etc.")
+                    # Add search filter with better styling
+                    search_term = st.text_input(
+                        "🔍 Filter URLs", 
+                        placeholder="Search by domain, path, etc.",
+                        key="url_search"
+                    )
                     
                     if search_term:
                         filtered_df = df[df['URL'].str.contains(search_term, case=False)]
@@ -1036,19 +1397,21 @@ def main():
                         filtered_df = df
                     
                     # Display as an interactive table
-                    st.write(f"Showing {len(filtered_df)} of {len(df)} URLs")
+                    st.markdown(f'<div style="margin-bottom: 0.5rem; color: #64748B; font-size: 0.875rem;">Showing {len(filtered_df)} of {len(df)} URLs</div>', unsafe_allow_html=True)
                     st.write(filtered_df.to_html(escape=False), unsafe_allow_html=True)
                     
-                    # Export to CSV button
+                    # Export to CSV button with better styling
                     csv = filtered_df.to_csv(index=False)
                     b64 = base64.b64encode(csv.encode()).decode()
-                    href = f'<a href="data:file/csv;base64,{b64}" download="sitemap_results.csv" class="download-button">Download CSV</a>'
-                    st.markdown(href, unsafe_allow_html=True)
+                    st.markdown(f'<a href="data:file/csv;base64,{b64}" download="sitemap_results.csv" class="download-button">📥 Download CSV</a>', unsafe_allow_html=True)
                 else:
                     st.info("Click 'Test All URLs' to validate the sitemap URLs.")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
         
         # Sitemap Editor Tab
         with tab3:
+            st.markdown('<div class="card">', unsafe_allow_html=True)
             st.header("Sitemap Editor")
             
             col1, col2 = st.columns([3, 1])
@@ -1057,7 +1420,7 @@ def main():
                 sitemap_content = st.session_state.sitemap_data.get("sitemap_content", "")
                 formatted_xml = validator.format_xml(sitemap_content) if sitemap_content else ""
                 
-                # XML Editor
+                # XML Editor with monospace font
                 edited_xml = st.text_area(
                     "XML Content",
                     value=formatted_xml,
@@ -1065,7 +1428,8 @@ def main():
                 )
             
             with col2:
-                st.subheader("Find & Replace")
+                st.markdown('<div style="background-color: #F8FAFC; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">', unsafe_allow_html=True)
+                st.markdown('<span style="font-weight: 600; color: #334155;">Find & Replace</span>', unsafe_allow_html=True)
                 
                 find_text = st.text_input("Find", placeholder="Text to find")
                 replace_text = st.text_input("Replace", placeholder="Replacement text")
@@ -1087,8 +1451,11 @@ def main():
                             st.success(f"Made {result['count']} replacements")
                     else:
                         st.warning("Please enter text to find")
+                st.markdown('</div>', unsafe_allow_html=True)
                 
-                st.divider()
+                # Action buttons with better styling
+                st.markdown('<div style="background-color: #F8FAFC; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">', unsafe_allow_html=True)
+                st.markdown('<span style="font-weight: 600; color: #334155;">Actions</span>', unsafe_allow_html=True)
                 
                 # Validation button
                 if st.button("Validate XML", use_container_width=True):
@@ -1102,71 +1469,99 @@ def main():
                 if edited_xml:
                     b64 = base64.b64encode(edited_xml.encode()).decode()
                     download_filename = "modified_sitemap.xml"
-                    href = f'<a href="data:application/xml;base64,{b64}" download="{download_filename}" class="download-button">Download XML</a>'
-                    st.markdown(href, unsafe_allow_html=True)
+                    st.markdown(f'<a href="data:application/xml;base64,{b64}" download="{download_filename}" class="download-button" style="display: block; text-align: center; margin-top: 0.5rem;">📥 Download XML</a>', unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
             
-            # Preview section
+            # Preview section with better styling
             if edited_xml:
-                with st.expander("URL Preview"):
-                    try:
-                        preview_urls = validator.extract_urls_from_sitemap(edited_xml)
+                st.markdown('<details class="modern-expander" style="margin-top: 1rem;">', unsafe_allow_html=True)
+                st.markdown('<summary>URL Preview</summary>', unsafe_allow_html=True)
+                st.markdown('<div style="padding: 1rem;">', unsafe_allow_html=True)
+                
+                try:
+                    preview_urls = validator.extract_urls_from_sitemap(edited_xml)
+                    
+                    if preview_urls:
+                        preview_data = []
+                        for url in preview_urls[:100]:  # Limit to first 100
+                            preview_data.append({
+                                "URL": url.get("url", ""),
+                                "Last Modified": url.get("lastmod", "-"),
+                                "Priority": url.get("priority", "-"),
+                                "Change Frequency": url.get("changefreq", "-"),
+                                "Images": len(url.get("images", [])),
+                                "Videos": len(url.get("videos", []))
+                            })
                         
-                        if preview_urls:
-                            preview_data = []
-                            for url in preview_urls[:100]:  # Limit to first 100
-                                preview_data.append({
-                                    "URL": url.get("url", ""),
-                                    "Last Modified": url.get("lastmod", "-"),
-                                    "Priority": url.get("priority", "-"),
-                                    "Change Frequency": url.get("changefreq", "-"),
-                                    "Images": len(url.get("images", [])),
-                                    "Videos": len(url.get("videos", []))
-                                })
-                            
-                            st.dataframe(pd.DataFrame(preview_data), use_container_width=True)
-                            
-                            if len(preview_urls) > 100:
-                                st.info(f"Showing 100 of {len(preview_urls)} URLs")
-                        else:
-                            st.info("No URLs found in the edited XML")
-                    except Exception as e:
-                        st.error(f"Error parsing XML: {str(e)}")
+                        st.dataframe(pd.DataFrame(preview_data), use_container_width=True)
+                        
+                        if len(preview_urls) > 100:
+                            st.info(f"Showing 100 of {len(preview_urls)} URLs")
+                    else:
+                        st.info("No URLs found in the edited XML")
+                except Exception as e:
+                    st.error(f"Error parsing XML: {str(e)}")
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown('</details>', unsafe_allow_html=True)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
         
         # Robots.txt Tab
         with tab4:
+            st.markdown('<div class="card">', unsafe_allow_html=True)
             st.header("Robots.txt Analysis")
             
             robots_data = st.session_state.sitemap_data.get("robots_txt_data", {})
             
             if robots_data:
-                # Robots.txt status
+                # Robots.txt status with modern badges
                 status_col1, status_col2 = st.columns(2)
                 
                 with status_col1:
                     if robots_data.get("found", False):
-                        st.success("✅ robots.txt found")
+                        st.markdown('<div style="background-color: #ECFDF5; padding: 0.75rem 1rem; border-radius: 8px; display: flex; align-items: center;">'
+                                   '<span style="color: #10B981; font-size: 1.2rem; margin-right: 0.5rem;">✓</span>'
+                                   '<span style="font-weight: 500;">robots.txt found</span>'
+                                   '</div>', unsafe_allow_html=True)
                     else:
-                        st.error("❌ robots.txt not found")
+                        st.markdown('<div style="background-color: #FEE2E2; padding: 0.75rem 1rem; border-radius: 8px; display: flex; align-items: center;">'
+                                   '<span style="color: #EF4444; font-size: 1.2rem; margin-right: 0.5rem;">✗</span>'
+                                   '<span style="font-weight: 500;">robots.txt not found</span>'
+                                   '</div>', unsafe_allow_html=True)
                 
                 with status_col2:
                     if robots_data.get("sitemap_declared", False):
-                        st.success("✅ Sitemap declared in robots.txt")
+                        st.markdown('<div style="background-color: #ECFDF5; padding: 0.75rem 1rem; border-radius: 8px; display: flex; align-items: center;">'
+                                   '<span style="color: #10B981; font-size: 1.2rem; margin-right: 0.5rem;">✓</span>'
+                                   '<span style="font-weight: 500;">Sitemap declared in robots.txt</span>'
+                                   '</div>', unsafe_allow_html=True)
                     else:
-                        st.error("❌ Sitemap not declared in robots.txt")
+                        st.markdown('<div style="background-color: #FEE2E2; padding: 0.75rem 1rem; border-radius: 8px; display: flex; align-items: center;">'
+                                   '<span style="color: #EF4444; font-size: 1.2rem; margin-right: 0.5rem;">✗</span>'
+                                   '<span style="font-weight: 500;">Sitemap not declared in robots.txt</span>'
+                                   '</div>', unsafe_allow_html=True)
                 
-                # Sitemaps in robots.txt
+                # Sitemaps in robots.txt with card styling
                 if robots_data.get("sitemaps"):
-                    st.subheader("Sitemaps in robots.txt")
+                    st.markdown('<div style="background-color: #F8FAFC; padding: 1rem; border-radius: 8px; margin: 1rem 0;">', unsafe_allow_html=True)
+                    st.markdown('<span style="font-weight: 600; color: #334155;">Sitemaps in robots.txt</span>', unsafe_allow_html=True)
                     for sitemap in robots_data.get("sitemaps", []):
-                        st.markdown(f"- [{sitemap}]({sitemap})")
+                        st.markdown(f'<div style="margin-top: 0.5rem; word-break: break-all;">'
+                                   f'<a href="{sitemap}" target="_blank" style="color: #3B82F6; text-decoration: none;">'
+                                   f'{sitemap}'
+                                   f'</a>'
+                                   f'</div>', unsafe_allow_html=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
                 
-                # Robots.txt content
+                # Robots.txt content with code styling
                 st.subheader("robots.txt Content")
                 robots_content = robots_data.get("content", "# No robots.txt content available")
-                st.text_area("Content", value=robots_content, height=300, disabled=True)
+                st.code(robots_content, language="text")
                 
-                # Recommendations
-                st.subheader("Recommendations")
+                # Recommendations with modern styling
+                st.markdown('<div style="background-color: #F8FAFC; padding: 1rem; border-radius: 8px; margin: 1rem 0;">', unsafe_allow_html=True)
+                st.markdown('<span style="font-weight: 600; color: #334155;">Recommendations</span>', unsafe_allow_html=True)
                 
                 recommendations = []
                 
@@ -1184,15 +1579,26 @@ def main():
                     recommendations.append("Consider adding Crawl-delay directive to control crawler rate")
                 
                 if recommendations:
-                    for recommendation in recommendations:
-                        st.markdown(f"- {recommendation}")
+                    for i, recommendation in enumerate(recommendations):
+                        st.markdown(f'<div style="display: flex; align-items: flex-start; margin-top: 0.5rem;">'
+                                   f'<div style="color: #3B82F6; margin-right: 0.5rem;">●</div>'
+                                   f'<div>{recommendation}</div>'
+                                   f'</div>', unsafe_allow_html=True)
                 else:
-                    st.success("No recommendations - robots.txt appears to be properly configured")
+                    st.markdown('<div style="background-color: #ECFDF5; padding: 0.75rem 1rem; border-radius: 8px; display: flex; align-items: center; margin-top: 0.5rem;">'
+                               '<span style="color: #10B981; font-size: 1.2rem; margin-right: 0.5rem;">✓</span>'
+                               '<span style="font-weight: 500;">No recommendations - robots.txt appears to be properly configured</span>'
+                               '</div>', unsafe_allow_html=True)
+                
+                st.markdown('</div>', unsafe_allow_html=True)
             else:
                 st.info("Robots.txt data not available. Load a sitemap first.")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
         
         # Analytics Tab
         with tab5:
+            st.markdown('<div class="card">', unsafe_allow_html=True)
             st.header("Sitemap Analytics")
             
             results = st.session_state.sitemap_data.get("validation_results")
@@ -1203,7 +1609,7 @@ def main():
             else:
                 performance_data = validator.analyze_performance(results)
                 
-                # Performance metrics
+                # Performance metrics with enhanced styling
                 st.subheader("Performance Metrics")
                 
                 metric_col1, metric_col2, metric_col3 = st.columns(3)
@@ -1246,8 +1652,9 @@ def main():
                         unsafe_allow_html=True
                     )
                 
-                # Response time distribution
-                st.subheader("Response Time Distribution")
+                # Response time distribution with enhanced styling
+                st.markdown('<div style="background-color: #F8FAFC; padding: 1rem; border-radius: 8px; margin: 1rem 0;">', unsafe_allow_html=True)
+                st.markdown('<span style="font-weight: 600; color: #334155;">Response Time Distribution</span>', unsafe_allow_html=True)
                 
                 response_times = [r["response_time"] for r in results if isinstance(r["response_time"], (int, float))]
                 
@@ -1257,32 +1664,54 @@ def main():
                         x=response_times,
                         nbins=20,
                         labels={"x": "Response Time (ms)"},
-                        color_discrete_sequence=["#2e7fff"]
+                        color_discrete_sequence=["#3B82F6"]
                     )
                     fig.update_layout(
                         height=300,
                         margin=dict(l=20, r=20, t=30, b=40),
                         paper_bgcolor='rgba(0,0,0,0)',
-                        plot_bgcolor='rgba(0,0,0,0)'
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        xaxis=dict(
+                            title="Response Time (ms)",
+                            titlefont=dict(size=12),
+                            tickfont=dict(size=10)
+                        ),
+                        yaxis=dict(
+                            title="Count",
+                            titlefont=dict(size=12),
+                            tickfont=dict(size=10)
+                        )
                     )
                     st.plotly_chart(fig, use_container_width=True)
                     
-                    # Additional stats
+                    # Additional stats with enhanced styling
                     median_time = np.median(response_times)
                     p90_time = np.percentile(response_times, 90)
                     
                     stat_col1, stat_col2, stat_col3 = st.columns(3)
                     with stat_col1:
-                        st.metric("Median Response Time", f"{int(median_time)} ms")
+                        st.markdown(f'<div style="text-align: center;">'
+                                   f'<div style="font-size: 0.875rem; color: #64748B;">Median Response Time</div>'
+                                   f'<div style="font-size: 1.5rem; font-weight: 600; color: #334155;">{int(median_time)} ms</div>'
+                                   f'</div>', unsafe_allow_html=True)
                     with stat_col2:
-                        st.metric("90th Percentile", f"{int(p90_time)} ms")
+                        st.markdown(f'<div style="text-align: center;">'
+                                   f'<div style="font-size: 0.875rem; color: #64748B;">90th Percentile</div>'
+                                   f'<div style="font-size: 1.5rem; font-weight: 600; color: #334155;">{int(p90_time)} ms</div>'
+                                   f'</div>', unsafe_allow_html=True)
                     with stat_col3:
-                        st.metric("Max Response Time", f"{max(response_times)} ms")
+                        st.markdown(f'<div style="text-align: center;">'
+                                   f'<div style="font-size: 0.875rem; color: #64748B;">Max Response Time</div>'
+                                   f'<div style="font-size: 1.5rem; font-weight: 600; color: #334155;">{max(response_times)} ms</div>'
+                                   f'</div>', unsafe_allow_html=True)
                 else:
                     st.info("No valid response time data available.")
                 
-                # Domain analysis
-                st.subheader("Domain Analysis")
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Domain analysis with card styling
+                st.markdown('<div style="background-color: #F8FAFC; padding: 1rem; border-radius: 8px; margin: 1rem 0;">', unsafe_allow_html=True)
+                st.markdown('<span style="font-weight: 600; color: #334155;">Domain Analysis</span>', unsafe_allow_html=True)
                 
                 domains = {}
                 for result in results:
@@ -1329,8 +1758,11 @@ def main():
                     domain_df = pd.DataFrame(domain_data)
                     st.dataframe(domain_df, use_container_width=True)
                 
-                # Content type analysis (images, videos)
-                st.subheader("Content Analysis")
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Content type analysis with card styling
+                st.markdown('<div style="background-color: #F8FAFC; padding: 1rem; border-radius: 8px; margin: 1rem 0;">', unsafe_allow_html=True)
+                st.markdown('<span style="font-weight: 600; color: #334155;">Content Analysis</span>', unsafe_allow_html=True)
                 
                 # Count media by URL
                 media_data = []
@@ -1351,23 +1783,32 @@ def main():
                     media_df = media_df.sort_values(by="Total Media", ascending=False)
                     
                     # Show top 10 URLs with most media
-                    st.write("Top URLs with Most Media")
+                    st.markdown('<div style="margin: 1rem 0 0.5rem 0;">Top URLs with Most Media</div>', unsafe_allow_html=True)
                     st.dataframe(media_df.head(10), use_container_width=True)
                     
-                    # Total media counts
+                    # Total media counts with modern styling
                     total_images = sum(url.get("Images", 0) for url in media_data)
                     total_videos = sum(url.get("Videos", 0) for url in media_data)
                     
                     media_col1, media_col2 = st.columns(2)
                     with media_col1:
-                        st.metric("Total Images", total_images)
+                        st.markdown(f'<div style="background-color: white; padding: 1rem; border-radius: 8px; text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">'
+                                   f'<div style="font-size: 0.875rem; color: #64748B;">Total Images</div>'
+                                   f'<div style="font-size: 1.5rem; font-weight: 600; color: #334155;">{total_images}</div>'
+                                   f'</div>', unsafe_allow_html=True)
                     with media_col2:
-                        st.metric("Total Videos", total_videos)
+                        st.markdown(f'<div style="background-color: white; padding: 1rem; border-radius: 8px; text-align: center; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">'
+                                   f'<div style="font-size: 0.875rem; color: #64748B;">Total Videos</div>'
+                                   f'<div style="font-size: 1.5rem; font-weight: 600; color: #334155;">{total_videos}</div>'
+                                   f'</div>', unsafe_allow_html=True)
                 else:
                     st.info("No media content found in the sitemap.")
                 
-                # Critical insights
-                st.subheader("Insights & Recommendations")
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Critical insights with modern alert styling
+                st.markdown('<div style="background-color: #F8FAFC; padding: 1rem; border-radius: 8px; margin: 1rem 0;">', unsafe_allow_html=True)
+                st.markdown('<span style="font-weight: 600; color: #334155;">Insights & Recommendations</span>', unsafe_allow_html=True)
                 
                 insights = []
                 
@@ -1410,23 +1851,44 @@ def main():
                         "message": f"Sitemap contains URLs from {len(domains)} different domains"
                     })
                 
-                # Display insights
-                for insight in insights:
-                    if insight["type"] == "error":
-                        st.error(insight["message"])
-                    elif insight["type"] == "warning":
-                        st.warning(insight["message"])
-                    else:
-                        st.info(insight["message"])
+                # Display insights with modern styling
+                if insights:
+                    for insight in insights:
+                        if insight["type"] == "error":
+                            st.markdown(f'<div style="background-color: #FEE2E2; padding: 0.75rem 1rem; border-radius: 8px; display: flex; align-items: center; margin-top: 0.5rem;">'
+                                      f'<span style="color: #EF4444; font-size: 1.2rem; margin-right: 0.5rem;">⚠️</span>'
+                                      f'<span style="font-weight: 500;">{insight["message"]}</span>'
+                                      f'</div>', unsafe_allow_html=True)
+                        elif insight["type"] == "warning":
+                            st.markdown(f'<div style="background-color: #FFFBEB; padding: 0.75rem 1rem; border-radius: 8px; display: flex; align-items: center; margin-top: 0.5rem;">'
+                                      f'<span style="color: #F59E0B; font-size: 1.2rem; margin-right: 0.5rem;">ℹ️</span>'
+                                      f'<span style="font-weight: 500;">{insight["message"]}</span>'
+                                      f'</div>', unsafe_allow_html=True)
+                        else:
+                            st.markdown(f'<div style="background-color: #EFF6FF; padding: 0.75rem 1rem; border-radius: 8px; display: flex; align-items: center; margin-top: 0.5rem;">'
+                                      f'<span style="color: #3B82F6; font-size: 1.2rem; margin-right: 0.5rem;">ℹ️</span>'
+                                      f'<span style="font-weight: 500;">{insight["message"]}</span>'
+                                      f'</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown('<div style="background-color: #ECFDF5; padding: 0.75rem 1rem; border-radius: 8px; display: flex; align-items: center; margin-top: 0.5rem;">'
+                              f'<span style="color: #10B981; font-size: 1.2rem; margin-right: 0.5rem;">✓</span>'
+                              f'<span style="font-weight: 500;">No issues detected</span>'
+                              f'</div>', unsafe_allow_html=True)
                 
-                # Recommendations
+                # Recommendations with clean styling
                 if performance_data["recommendations"]:
-                    st.subheader("Performance Recommendations")
+                    st.markdown('<div style="margin-top: 1rem;">', unsafe_allow_html=True)
+                    st.markdown('<span style="font-weight: 600; color: #334155;">Performance Recommendations</span>', unsafe_allow_html=True)
                     for recommendation in performance_data["recommendations"]:
-                        st.markdown(f"- {recommendation}")
+                        st.markdown(f'<div style="display: flex; align-items: flex-start; margin-top: 0.5rem;">'
+                                   f'<div style="color: #3B82F6; margin-right: 0.5rem;">●</div>'
+                                   f'<div>{recommendation}</div>'
+                                   f'</div>', unsafe_allow_html=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
                 
                 # Additional recommendations
-                st.subheader("General Recommendations")
+                st.markdown('<div style="margin-top: 1rem;">', unsafe_allow_html=True)
+                st.markdown('<span style="font-weight: 600; color: #334155;">General Recommendations</span>', unsafe_allow_html=True)
                 
                 general_recommendations = [
                     "Implement browser caching to improve response times",
@@ -1444,12 +1906,22 @@ def main():
                         general_recommendations.append("Consider implementing a CDN to improve content delivery speed")
                 
                 for recommendation in general_recommendations:
-                    st.markdown(f"- {recommendation}")
+                    st.markdown(f'<div style="display: flex; align-items: flex-start; margin-top: 0.5rem;">'
+                               f'<div style="color: #3B82F6; margin-right: 0.5rem;">●</div>'
+                               f'<div>{recommendation}</div>'
+                               f'</div>', unsafe_allow_html=True)
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
 
-    # Footer
+    # Modern footer
     st.markdown("""
     <div class="footer">
         <p>Sitemap Validator & Analyzer | Built with Streamlit</p>
+        <p style="font-size: 0.75rem; margin-top: 0.25rem;">© 2025 | v2.0.0</p>
     </div>
     """, unsafe_allow_html=True)
 
