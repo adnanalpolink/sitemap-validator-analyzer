@@ -1404,6 +1404,58 @@ class SitemapValidator:
             "content_types": content_fig
         }
 
+    def check_robots_txt(self, url: str) -> Dict[str, Any]:
+        """Check robots.txt file for a given URL and analyze its contents"""
+        try:
+            # Parse the URL to get the base domain
+            parsed_url = urlparse(url)
+            base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+            robots_url = f"{base_url}/robots.txt"
+            
+            # Fetch robots.txt
+            response = requests.get(
+                robots_url,
+                headers={"User-Agent": self.state["user_agent"]},
+                timeout=self.state["timeout"]
+            )
+            
+            result = {
+                "found": False,
+                "sitemap_declared": False,
+                "sitemaps": [],
+                "content": None,
+                "status_code": response.status_code
+            }
+            
+            if response.status_code == 200:
+                result["found"] = True
+                content = response.text
+                result["content"] = content
+                
+                # Look for Sitemap declarations
+                sitemaps = []
+                for line in content.splitlines():
+                    if line.lower().startswith(("sitemap:", "sitemap ")):
+                        sitemap_url = line.split(":", 1)[1].strip()
+                        sitemaps.append(sitemap_url)
+                
+                result["sitemaps"] = sitemaps
+                result["sitemap_declared"] = any(
+                    url.strip() in sitemap.strip() 
+                    for sitemap in sitemaps
+                )
+            
+            return result
+            
+        except Exception as e:
+            return {
+                "found": False,
+                "sitemap_declared": False,
+                "sitemaps": [],
+                "content": None,
+                "error": str(e)
+            }
+
 def main():
     st.set_page_config(
         page_title="Advanced Sitemap Validator & Analyzer",
