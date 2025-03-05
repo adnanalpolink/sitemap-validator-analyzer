@@ -39,7 +39,7 @@ try:
     nltk.data.find('corpora/stopwords')
 except LookupError:
     nltk.download('stopwords', quiet=True)
-	
+
 # Modern UI Theme Configuration
 THEME = {
     "colors": {
@@ -91,12 +91,10 @@ CUSTOM_STYLES = f"""
     --animation-fast: {THEME["animations"]["fast"]};
 }}
 
-/* Base overrides */
 .stApp {{
     background-color: var(--background);
 }}
 
-/* Typography */
 h1, h2, h3, h4, h5, h6 {{
     font-family: {THEME["fonts"]["heading"]};
     color: var(--text);
@@ -112,7 +110,6 @@ code {{
     font-family: {THEME["fonts"]["code"]};
 }}
 
-/* Card design */
 .card {{
     background: rgba(31, 41, 55, 0.7);
     backdrop-filter: blur(10px);
@@ -124,27 +121,6 @@ code {{
     transition: var(--animation-default);
 }}
 
-.card:hover {{
-    box-shadow: var(--shadow-lg);
-    transform: translateY(-2px);
-}}
-
-.card-header {{
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    padding-bottom: 0.75rem;
-    margin-bottom: 1rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}}
-
-.card-title {{
-    font-size: 1.25rem;
-    font-weight: 600;
-    margin: 0;
-}}
-
-/* App header */
 .app-header {{
     padding: 2rem;
     background: linear-gradient(135deg, rgba(108, 99, 255, 0.2), rgba(126, 87, 194, 0.1));
@@ -185,51 +161,33 @@ code {{
     max-width: 650px;
 }}
 
-/* Hero section */
-.hero-section {{
-    margin-bottom: 3rem;
-    text-align: center;
+.stat-card {{
+    background: rgba(31, 41, 55, 0.5);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 1.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }}
 
-.hero-subtitle {{
-    color: var(--primary);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    font-size: 0.875rem;
-    margin-bottom: 1rem;
-}}
-
-.hero-title {{
-    font-size: 2.75rem;
-    font-weight: 800;
-    margin-bottom: 1rem;
-    background: linear-gradient(
-        90deg,
-        #ffffff 0%,
-        #e0f2fe 33%,
-        #bfdbfe 66%,
-        #93c5fd 100%
-    );
+.stat-card-value {{
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0;
+    background: linear-gradient(135deg, #fff, #ccc);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    background-size: 200% auto;
-    animation: gradient-animation 4s linear infinite;
 }}
 
-.hero-description {{
-    font-size: 1.1rem;
+.stat-card-label {{
+    font-size: 0.875rem;
     color: var(--text-secondary);
-    max-width: 700px;
-    margin: 0 auto 2rem;
+    margin: 0;
 }}
 
-@keyframes gradient-animation {{
-    0% {{ background-position: 0% center; }}
-    100% {{ background-position: 200% center; }}
-}}
-
-/* Footer */
 .footer {{
     text-align: center;
     padding: 2rem;
@@ -238,7 +196,6 @@ code {{
     color: var(--text-secondary);
 }}
 
-/* Streamlit component overrides */
 div.stButton > button {{
     background: linear-gradient(135deg, var(--primary), var(--secondary));
     color: white;
@@ -268,7 +225,6 @@ div.stButton > button:hover {{
     color: var(--text);
 }}
 
-/* Tab styles */
 div.stTabs [data-baseweb="tab-list"] {{
     gap: 8px;
     background-color: transparent;
@@ -286,7 +242,23 @@ div.stTabs [aria-selected="true"] {{
     color: white !important;
 }}
 
-/* Custom alert styles */
+.download-button {{
+    display: inline-block;
+    padding: 0.5rem 1.5rem;
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 500;
+    margin-top: 1rem;
+    transition: var(--animation-fast);
+}}
+
+.download-button:hover {{
+    opacity: 0.9;
+    transform: translateY(-1px);
+}}
+
 .alert {{
     padding: 1rem 1.5rem;
     border-radius: 8px;
@@ -334,105 +306,51 @@ div.stTabs [aria-selected="true"] {{
     border-left: 4px solid var(--error);
 }}
 
-/* Download button */
-.download-button {{
-    display: inline-block;
-    padding: 0.5rem 1.5rem;
-    background: linear-gradient(135deg, var(--primary), var(--secondary));
-    color: white;
-    text-decoration: none;
-    border-radius: 8px;
-    font-weight: 500;
-    margin-top: 1rem;
-    transition: var(--animation-fast);
+.hero-section {{
+    margin-bottom: 3rem;
+    text-align: center;
 }}
 
-.download-button:hover {{
-    opacity: 0.9;
-    transform: translateY(-1px);
+.hero-subtitle {{
+    color: var(--primary);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
 }}
 
-/* Stat card styles */
-.stat-card {{
-    background: rgba(31, 41, 55, 0.5);
-    backdrop-filter: blur(10px);
-    border-radius: 12px;
-    padding: 1.25rem;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-}}
-
-.stat-card-value {{
-    font-size: 2rem;
-    font-weight: 700;
-    margin: 0;
-    background: linear-gradient(135deg, #fff, #ccc);
+.hero-title {{
+    font-size: 2.75rem;
+    font-weight: 800;
+    margin-bottom: 1rem;
+    background: linear-gradient(
+        90deg,
+        #ffffff 0%,
+        #e0f2fe 33%,
+        #bfdbfe 66%,
+        #93c5fd 100%
+    );
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    background-size: 200% auto;
+    animation: gradient-animation 4s linear infinite;
 }}
 
-.stat-card-label {{
-    font-size: 0.875rem;
+.hero-description {{
+    font-size: 1.1rem;
     color: var(--text-secondary);
-    margin: 0;
+    max-width: 700px;
+    margin: 0 auto 2rem;
 }}
 
-/* Grid system */
-.grid-container {{
-    display: grid;
-    grid-template-columns: repeat(12, 1fr);
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-}}
-
-.grid-item-3 {{
-    grid-column: span 3;
-}}
-
-.grid-item-4 {{
-    grid-column: span 4;
-}}
-
-.grid-item-6 {{
-    grid-column: span 6;
-}}
-
-.grid-item-8 {{
-    grid-column: span 8;
-}}
-
-.grid-item-9 {{
-    grid-column: span 9;
-}}
-
-.grid-item-12 {{
-    grid-column: span 12;
-}}
-
-/* Status styles */
-.status-indicator {{
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-weight: 500;
-}}
-
-.status-ok {{
-    color: var(--success);
-}}
-
-.status-warning {{
-    color: var(--warning);
-}}
-
-.status-error {{
-    color: var(--error);
+@keyframes gradient-animation {{
+    0% {{ background-position: 0% center; }}
+    100% {{ background-position: 200% center; }}
 }}
 </style>
 """
+
 # Icon SVG definitions for use throughout the app
 ICONS = {
     "globe": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>""",
@@ -442,13 +360,10 @@ ICONS = {
     "error": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>""",
     "info": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>""",
     "download": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>""",
-    "upload": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>""",
-    "settings": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>""",
-    "chart": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>""",
-    "image": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>""",
     "video": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>""",
-    "refresh": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>"""
+    "image": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>"""
 }
+
 @dataclass
 class URLData:
     url: str
@@ -500,7 +415,7 @@ class AnalysisResult:
     
     def to_dict(self) -> Dict:
         return asdict(self)
-		
+
 class SitemapValidator:
     """Advanced Sitemap Validator with enhanced features and analytics"""
     
@@ -548,96 +463,34 @@ class SitemapValidator:
         """Load custom CSS and JavaScript for enhanced UI interactions"""
         st.markdown(CUSTOM_STYLES, unsafe_allow_html=True)
         
-        # Add custom JavaScript for interactive features
-        st.markdown("""
-        <script type="text/javascript">
-        function toggleDetails(id) {
-            const detailsElement = document.getElementById(id);
-            if (detailsElement) {
-                detailsElement.style.display = detailsElement.style.display === 'none' ? 'block' : 'none';
-            }
+    @st.cache_data(ttl=3600)
+    def load_sitemap(_self, url: str) -> Tuple[str, Dict]:
+        """Load and parse sitemap XML with Streamlit caching"""
+        info = {
+            "status": "error",
+            "message": "",
+            "content_type": None,
+            "size": 0,
+            "is_gzipped": False
         }
         
-        function copyToClipboard(text) {
-            navigator.clipboard.writeText(text).then(() => {
-                // Show a toast notification
-                const toast = document.createElement('div');
-                toast.textContent = 'Copied to clipboard!';
-                toast.style.position = 'fixed';
-                toast.style.bottom = '20px';
-                toast.style.right = '20px';
-                toast.style.padding = '10px 20px';
-                toast.style.backgroundColor = '#10B981';
-                toast.style.color = 'white';
-                toast.style.borderRadius = '8px';
-                toast.style.zIndex = '9999';
-                toast.style.opacity = '0';
-                toast.style.transition = 'opacity 0.3s ease-in-out';
-                
-                document.body.appendChild(toast);
-                
-                // Fade in
-                setTimeout(() => {
-                    toast.style.opacity = '1';
-                }, 10);
-                
-                // Fade out and remove
-                setTimeout(() => {
-                    toast.style.opacity = '0';
-                    setTimeout(() => {
-                        document.body.removeChild(toast);
-                    }, 300);
-                }, 2000);
-            });
-        }
-        
-        // Add smooth scrolling to anchor links
-        document.addEventListener('DOMContentLoaded', function() {
-            const links = document.querySelectorAll('a[href^="#"]');
-            for (const link of links) {
-                link.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    const targetId = this.getAttribute('href').substring(1);
-                    const targetElement = document.getElementById(targetId);
-                    if (targetElement) {
-                        targetElement.scrollIntoView({
-                            behavior: 'smooth'
-                        });
-                    }
-                });
-            }
-        });
-        </script>
-        """, unsafe_allow_html=True)
-		
-@st.cache_data(ttl=3600)
-def load_sitemap(_self, url: str) -> Tuple[str, Dict]:
-    """Load and parse sitemap XML with Streamlit caching"""
-    info = {
-        "status": "error",
-        "message": "",
-        "content_type": None,
-        "size": 0,
-        "is_gzipped": False
-    }
-    
-    try:
-        headers = {"User-Agent": _self.state["user_agent"]}
-        response = requests.get(url, headers=headers, timeout=_self.state["timeout"])
-        
-        info["status"] = "success" if response.status_code == 200 else "error"
-        info["message"] = f"HTTP Status: {response.status_code}"
-        info["content_type"] = response.headers.get("Content-Type", "")
-        info["size"] = len(response.content)
-        info["is_gzipped"] = response.headers.get("Content-Encoding", "") == "gzip"
-        
-        if response.status_code != 200:
-            return "", info
+        try:
+            headers = {"User-Agent": _self.state["user_agent"]}
+            response = requests.get(url, headers=headers, timeout=_self.state["timeout"])
             
-        return response.text, info
-    except Exception as e:
-        info["message"] = f"Error loading sitemap: {str(e)}"
-        return "", info
+            info["status"] = "success" if response.status_code == 200 else "error"
+            info["message"] = f"HTTP Status: {response.status_code}"
+            info["content_type"] = response.headers.get("Content-Type", "")
+            info["size"] = len(response.content)
+            info["is_gzipped"] = response.headers.get("Content-Encoding", "") == "gzip"
+            
+            if response.status_code != 200:
+                return "", info
+                
+            return response.text, info
+        except Exception as e:
+            info["message"] = f"Error loading sitemap: {str(e)}"
+            return "", info
 
     @st.cache_data(ttl=3600)
     def extract_urls_from_sitemap(_self, xml_content: str) -> Tuple[List[URLData], SitemapInfo]:
@@ -696,7 +549,35 @@ def load_sitemap(_self, url: str) -> Tuple[str, Dict]:
         except Exception as e:
             st.error(f"Error parsing sitemap: {str(e)}")
             return [], sitemap_info
-	async def test_url_async(self, url_data: URLData, session: aiohttp.ClientSession) -> URLData:
+
+    def parse_date(self, date_str: str) -> Optional[datetime]:
+        """Parse date string in various formats"""
+        if not date_str:
+            return None
+        try:
+            # Remove timezone indicator 'Z' and replace with UTC offset
+            date_str = date_str.replace('Z', '+00:00')
+            
+            # Try parsing with various formats
+            for fmt in [
+                "%Y-%m-%dT%H:%M:%S%z",       # 2024-02-26T15:30:00+00:00
+                "%Y-%m-%dT%H:%M:%S.%f%z",    # 2024-02-26T15:30:00.000+00:00
+                "%Y-%m-%d",                  # 2024-02-26
+                "%Y-%m-%dT%H:%M:%S"          # 2024-02-26T15:30:00
+            ]:
+                try:
+                    dt = datetime.strptime(date_str, fmt)
+                    # If no timezone info, assume UTC
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    return dt
+                except ValueError:
+                    continue
+            return None
+        except Exception:
+            return None
+
+    async def test_url_async(self, url_data: URLData, session: aiohttp.ClientSession) -> URLData:
         """Test a single URL asynchronously and return results"""
         url = url_data.url
         headers = {"User-Agent": self.state["user_agent"]}
