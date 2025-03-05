@@ -705,7 +705,8 @@ class SitemapValidator:
             return results
         finally:
             loop.close()
-	def generate_html_sitemap(self, urls: List[URLData]) -> str:
+
+    def generate_html_sitemap(self, urls: List[URLData]) -> str:
         """Generate an interactive HTML sitemap from URL data"""
         html = """
         <!DOCTYPE html>
@@ -1227,7 +1228,8 @@ class SitemapValidator:
         html = html.replace("PLACEHOLDER_URL_DATA", url_json)
         
         return html
-	def analyze_sitemap_health(self, urls: List[URLData], results: List[URLData]) -> AnalysisResult:
+
+    def analyze_sitemap_health(self, urls: List[URLData], results: List[URLData]) -> AnalysisResult:
         """Analyze sitemap health and generate recommendations"""
         analysis = AnalysisResult()
         
@@ -1401,7 +1403,8 @@ class SitemapValidator:
             "response_times": time_fig,
             "content_types": content_fig
         }
-	def main():
+
+def main():
     st.set_page_config(
         page_title="Advanced Sitemap Validator & Analyzer",
         page_icon="🔍",
