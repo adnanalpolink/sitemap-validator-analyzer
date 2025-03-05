@@ -1966,7 +1966,7 @@ def main():
     # Footer
     st.markdown("""
     <div class="footer">
-        <div>Advanced Sitemap Validator & Analyzer | A modern SEO tool</div>
+        <div>Advanced Sitemap Validator & Analyzer | Made by Adnan Akram</div>
         <div style="font-size: 0.75rem; margin-top: 0.5rem;">© 2024 | Built with Streamlit</div>
     </div>
     """, unsafe_allow_html=True)
