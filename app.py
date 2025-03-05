@@ -112,35 +112,29 @@ CUSTOM_STYLES = """
 
 class SitemapValidator:
     def __init__(self):
-        self.state = {
-            "urls": [],
-            "concurrent_requests": 5,
-            "timeout": 10,
-            "user_agent": "Mozilla/5.0 (Streamlit Sitemap Validator)",
-            "status_counts": {"2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0, "error": 0},
-            "cache_dir": Path("cache"),
-            "history": []
-        }
-        self.state["cache_dir"].mkdir(exist_ok=True)
+        # Initialize state in session_state instead of instance variable
+        if 'validator_state' not in st.session_state:
+            st.session_state.validator_state = {
+                "urls": [],
+                "concurrent_requests": 5,
+                "timeout": 10,
+                "user_agent": "Mozilla/5.0 (Streamlit Sitemap Validator)",
+                "status_counts": {"2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0, "error": 0},
+                "history": []
+            }
+        self.state = st.session_state.validator_state
 
-    @lru_cache(maxsize=100)
-    def load_sitemap(self, url: str) -> str:
-        """Load and parse sitemap XML with caching"""
-        cache_key = hashlib.md5(url.encode()).hexdigest()
-        cache_file = self.state["cache_dir"] / f"{cache_key}.xml"
-        
-        if cache_file.exists() and (time.time() - cache_file.stat().st_mtime < 3600):  # 1 hour cache
-            return cache_file.read_text()
-        
+    @st.cache_data(ttl=3600)  # Cache for 1 hour
+    def load_sitemap(_self, url: str) -> str:
+        """Load and parse sitemap XML with Streamlit caching"""
         try:
-            response = requests.get(url, headers={"User-Agent": self.state["user_agent"]})
-            content = response.text
-            cache_file.write_text(content)
-            return content
+            response = requests.get(url, headers={"User-Agent": _self.state["user_agent"]})
+            return response.text
         except Exception as e:
             return f"Error loading sitemap: {str(e)}"
 
-    def extract_urls_from_sitemap(self, xml_content: str) -> List[Dict]:
+    @st.cache_data(ttl=3600)
+    def extract_urls_from_sitemap(_self, xml_content: str) -> List[Dict]:
         """Extract URLs and metadata from sitemap XML with support for sitemap index"""
         try:
             soup = BeautifulSoup(xml_content, 'xml')
@@ -151,8 +145,8 @@ class SitemapValidator:
             if sitemapindex:
                 for sitemap in sitemapindex.find_all('sitemap'):
                     loc = sitemap.find('loc').text
-                    sub_content = self.load_sitemap(loc)
-                    urls.extend(self.extract_urls_from_sitemap(sub_content))
+                    sub_content = _self.load_sitemap(loc)
+                    urls.extend(_self.extract_urls_from_sitemap(sub_content))
                 return urls
             
             # Process regular sitemap
@@ -341,26 +335,29 @@ class SitemapValidator:
         }
 
     def save_history(self, analysis_data: Dict):
-        """Save analysis history for trend monitoring"""
+        """Save analysis history in session state"""
+        if 'analysis_history' not in st.session_state:
+            st.session_state.analysis_history = []
+            
         timestamp = datetime.now().isoformat()
-        self.state["history"].append({
+        st.session_state.analysis_history.append({
             "timestamp": timestamp,
             "metrics": analysis_data["metrics"],
             "health_score": analysis_data["health_score"]
         })
         
         # Keep only last 30 days of history
-        self.state["history"] = [
-            h for h in self.state["history"]
+        st.session_state.analysis_history = [
+            h for h in st.session_state.analysis_history
             if datetime.fromisoformat(h["timestamp"]) > datetime.now() - timedelta(days=30)
         ]
 
     def generate_trend_chart(self) -> go.Figure:
-        """Generate trend chart from historical data"""
-        if not self.state["history"]:
+        """Generate trend chart from historical data in session state"""
+        if not st.session_state.get('analysis_history'):
             return None
         
-        df = pd.DataFrame(self.state["history"])
+        df = pd.DataFrame(st.session_state.analysis_history)
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         
         fig = go.Figure()
