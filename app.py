@@ -588,24 +588,27 @@ class SitemapValidator:
                 url, 
                 headers=headers, 
                 timeout=self.state["timeout"],
-                allow_redirects=self.state["follow_redirects"]
+                allow_redirects=False  # Don't automatically follow redirects
             ) as response:
                 end_time = time.time()
                 response_time = (end_time - start_time) * 1000
                 
                 status_code = response.status
                 
-                # Determine status group
-                if status_code >= 200 and status_code < 300:
-                    status_group = "2xx"
-                elif status_code >= 300 and status_code < 400:
-                    status_group = "3xx"
+                # Handle redirects manually
+                if status_code in (301, 302, 303, 307, 308):
+                    url_data.redirected = True
+                    url_data.final_url = response.headers.get('Location')
+                    url_data.status_group = "3xx"
+                # Handle other status codes
+                elif status_code >= 200 and status_code < 300:
+                    url_data.status_group = "2xx"
                 elif status_code >= 400 and status_code < 500:
-                    status_group = "4xx"
+                    url_data.status_group = "4xx"
                 elif status_code >= 500:
-                    status_group = "5xx"
+                    url_data.status_group = "5xx"
                 else:
-                    status_group = "error"
+                    url_data.status_group = "error"
                 
                 # Get content type and length
                 content_type = response.headers.get("Content-Type", "")
@@ -614,7 +617,8 @@ class SitemapValidator:
                 # Check for HTML content and extract more info if enabled
                 if (self.state["content_analysis"] and 
                     content_type and 
-                    "text/html" in content_type.lower()):
+                    "text/html" in content_type.lower() and
+                    status_code == 200):  # Only analyze content for 200 responses
                     try:
                         html = await response.text()
                         soup = BeautifulSoup(html, 'html.parser')
@@ -647,23 +651,21 @@ class SitemapValidator:
                         url_data.canonical_url = canonical_url
                         url_data.h1_count = h1_count
                     except Exception as e:
-                        pass
+                        url_data.error = f"Content analysis error: {str(e)}"
                 
                 # Update URL data
                 url_data.status_code = status_code
                 url_data.response_time = response_time
-                url_data.redirected = len(response.history) > 0 if hasattr(response, 'history') else False
-                url_data.final_url = str(response.url) if response.url != url else None
-                url_data.status_group = status_group
                 url_data.content_type = content_type
                 url_data.content_length = content_length
                 
             return url_data
             
         except asyncio.TimeoutError:
-            url_data.status_code = "Timeout"
+            url_data.status_code = 408  # Request Timeout
             url_data.response_time = self.state["timeout"] * 1000
-            url_data.status_group = "error"
+            url_data.status_group = "4xx"
+            url_data.error = "Request timed out"
             return url_data
             
         except Exception as e:
