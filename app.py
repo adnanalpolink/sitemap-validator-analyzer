@@ -1,16 +1,26 @@
 import streamlit as st
 import requests
 import xml.etree.ElementTree as ET
+from bs4 import BeautifulSoup
 import pandas as pd
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Union
 import concurrent.futures
 import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 import base64
 from urllib.parse import urlparse
+import json
+from pathlib import Path
+import time
+import matplotlib.pyplot as plt
+import seaborn as sns
+from io import BytesIO
+import hashlib
+from functools import lru_cache
 
 # Define styles in a separate string
 CUSTOM_STYLES = """
@@ -107,37 +117,269 @@ class SitemapValidator:
             "concurrent_requests": 5,
             "timeout": 10,
             "user_agent": "Mozilla/5.0 (Streamlit Sitemap Validator)",
-            "status_counts": {"2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0, "error": 0}
+            "status_counts": {"2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0, "error": 0},
+            "cache_dir": Path("cache"),
+            "history": []
         }
+        self.state["cache_dir"].mkdir(exist_ok=True)
 
+    @lru_cache(maxsize=100)
     def load_sitemap(self, url: str) -> str:
-        """Load and parse sitemap XML"""
+        """Load and parse sitemap XML with caching"""
+        cache_key = hashlib.md5(url.encode()).hexdigest()
+        cache_file = self.state["cache_dir"] / f"{cache_key}.xml"
+        
+        if cache_file.exists() and (time.time() - cache_file.stat().st_mtime < 3600):  # 1 hour cache
+            return cache_file.read_text()
+        
         try:
             response = requests.get(url, headers={"User-Agent": self.state["user_agent"]})
-            return response.text
+            content = response.text
+            cache_file.write_text(content)
+            return content
         except Exception as e:
             return f"Error loading sitemap: {str(e)}"
 
     def extract_urls_from_sitemap(self, xml_content: str) -> List[Dict]:
-        """Extract URLs and metadata from sitemap XML"""
+        """Extract URLs and metadata from sitemap XML with support for sitemap index"""
         try:
-            root = ET.fromstring(xml_content)
+            soup = BeautifulSoup(xml_content, 'xml')
             urls = []
             
-            for url in root.findall('.//{http://www.sitemaps.org/schemas/sitemap/0.9}url'):
+            # Check if this is a sitemap index
+            sitemapindex = soup.find('sitemapindex')
+            if sitemapindex:
+                for sitemap in sitemapindex.find_all('sitemap'):
+                    loc = sitemap.find('loc').text
+                    sub_content = self.load_sitemap(loc)
+                    urls.extend(self.extract_urls_from_sitemap(sub_content))
+                return urls
+            
+            # Process regular sitemap
+            for url in soup.find_all('url'):
                 url_data = {
-                    "url": url.find('{http://www.sitemaps.org/schemas/sitemap/0.9}loc').text,
-                    "lastmod": url.find('{http://www.sitemaps.org/schemas/sitemap/0.9}lastmod').text if url.find('{http://www.sitemaps.org/schemas/sitemap/0.9}lastmod') is not None else None,
-                    "priority": url.find('{http://www.sitemaps.org/schemas/sitemap/0.9}priority').text if url.find('{http://www.sitemaps.org/schemas/sitemap/0.9}priority') is not None else None,
-                    "changefreq": url.find('{http://www.sitemaps.org/schemas/sitemap/0.9}changefreq').text if url.find('{http://www.sitemaps.org/schemas/sitemap/0.9}changefreq') is not None else None,
-                    "images": [img.find('{http://www.google.com/schemas/sitemap-image/1.1}loc').text for img in url.findall('.//{http://www.google.com/schemas/sitemap-image/1.1}image')],
-                    "videos": [vid.find('{http://www.google.com/schemas/sitemap-video/1.1}content_loc').text for vid in url.findall('.//{http://www.google.com/schemas/sitemap-video/1.1}video')]
+                    "url": url.find('loc').text if url.find('loc') else None,
+                    "lastmod": url.find('lastmod').text if url.find('lastmod') else None,
+                    "priority": url.find('priority').text if url.find('priority') else None,
+                    "changefreq": url.find('changefreq').text if url.find('changefreq') else None,
+                    "images": [img.find('loc').text for img in url.find_all('image:image')],
+                    "videos": [vid.find('video:content_loc').text for vid in url.find_all('video:video')],
+                    "alternates": [
+                        {"href": link.get('href'), "hreflang": link.get('hreflang')}
+                        for link in url.find_all('xhtml:link')
+                    ]
                 }
-                urls.append(url_data)
+                if url_data["url"]:
+                    urls.append(url_data)
             
             return urls
         except Exception as e:
+            st.error(f"Error parsing sitemap: {str(e)}")
             return []
+
+    def generate_html_sitemap(self, urls: List[Dict]) -> str:
+        """Generate an HTML sitemap from URL data"""
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>HTML Sitemap</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 2rem; }
+                .sitemap { max-width: 1200px; margin: 0 auto; }
+                .url-group { margin-bottom: 2rem; }
+                .url-item { margin: 0.5rem 0; padding: 0.5rem; border-bottom: 1px solid #eee; }
+                .url-item:hover { background-color: #f5f5f5; }
+                .meta { color: #666; font-size: 0.9em; }
+                .alternates { margin-left: 1rem; font-size: 0.9em; color: #0066cc; }
+            </style>
+        </head>
+        <body>
+            <div class="sitemap">
+                <h1>HTML Sitemap</h1>
+        """
+        
+        # Group URLs by domain
+        domains = {}
+        for url_data in urls:
+            domain = urlparse(url_data["url"]).netloc
+            if domain not in domains:
+                domains[domain] = []
+            domains[domain].append(url_data)
+        
+        # Generate HTML for each domain
+        for domain, domain_urls in domains.items():
+            html += f'<div class="url-group"><h2>{domain}</h2>'
+            for url_data in domain_urls:
+                html += f"""
+                <div class="url-item">
+                    <a href="{url_data['url']}">{url_data['url']}</a>
+                    <div class="meta">
+                        Last Modified: {url_data.get('lastmod', 'N/A')} | 
+                        Priority: {url_data.get('priority', 'N/A')} | 
+                        Change Frequency: {url_data.get('changefreq', 'N/A')}
+                    </div>
+                """
+                if url_data.get('alternates'):
+                    html += '<div class="alternates">Alternate versions:<br>'
+                    for alt in url_data['alternates']:
+                        html += f'<a href="{alt["href"]}">{alt["hreflang"]}</a><br>'
+                    html += '</div>'
+                html += '</div>'
+            html += '</div>'
+        
+        html += """
+            </div>
+        </body>
+        </html>
+        """
+        return html
+
+    def analyze_sitemap_health(self, urls: List[Dict], results: List[Dict]) -> Dict:
+        """Analyze sitemap health and generate recommendations"""
+        analysis = {
+            "health_score": 0,
+            "issues": [],
+            "recommendations": [],
+            "metrics": {}
+        }
+        
+        # Calculate metrics
+        total_urls = len(urls)
+        if total_urls == 0:
+            return analysis
+        
+        success_count = sum(1 for r in results if r["status_group"] == "2xx")
+        redirect_count = sum(1 for r in results if r["status_group"] == "3xx")
+        error_count = sum(1 for r in results if r["status_group"] in ["4xx", "5xx", "error"])
+        
+        # Calculate health score (0-100)
+        health_score = (success_count / total_urls) * 100
+        analysis["health_score"] = round(health_score, 2)
+        
+        # Analyze issues
+        if redirect_count > 0:
+            analysis["issues"].append({
+                "type": "warning",
+                "message": f"{redirect_count} URLs are redirecting"
+            })
+        
+        if error_count > 0:
+            analysis["issues"].append({
+                "type": "error",
+                "message": f"{error_count} URLs are returning errors"
+            })
+        
+        # Generate recommendations
+        if redirect_count > 0:
+            analysis["recommendations"].append(
+                "Update sitemap with final URLs to eliminate redirects"
+            )
+        
+        if error_count > 0:
+            analysis["recommendations"].append(
+                "Fix or remove broken URLs from the sitemap"
+            )
+        
+        # Check lastmod dates
+        old_urls = sum(1 for url in urls if url.get("lastmod") and 
+                      datetime.fromisoformat(url["lastmod"].replace('Z', '+00:00')) < 
+                      datetime.now() - timedelta(days=180))
+        if old_urls > 0:
+            analysis["recommendations"].append(
+                f"Update lastmod dates for {old_urls} URLs that haven't been modified in 6 months"
+            )
+        
+        # Store metrics
+        analysis["metrics"] = {
+            "total_urls": total_urls,
+            "success_count": success_count,
+            "redirect_count": redirect_count,
+            "error_count": error_count,
+            "old_urls": old_urls
+        }
+        
+        return analysis
+
+    def generate_visualizations(self, results: List[Dict]) -> Dict:
+        """Generate visualization data for the sitemap analysis"""
+        # Status distribution pie chart
+        status_counts = {
+            "Success (2xx)": sum(1 for r in results if r["status_group"] == "2xx"),
+            "Redirects (3xx)": sum(1 for r in results if r["status_group"] == "3xx"),
+            "Client Errors (4xx)": sum(1 for r in results if r["status_group"] == "4xx"),
+            "Server Errors (5xx)": sum(1 for r in results if r["status_group"] == "5xx"),
+            "Other Errors": sum(1 for r in results if r["status_group"] == "error")
+        }
+        
+        status_fig = px.pie(
+            values=list(status_counts.values()),
+            names=list(status_counts.keys()),
+            title="URL Status Distribution",
+            color_discrete_map={
+                "Success (2xx)": "#00C49A",
+                "Redirects (3xx)": "#FFB347",
+                "Client Errors (4xx)": "#FF6B6B",
+                "Server Errors (5xx)": "#B00020",
+                "Other Errors": "#718096"
+            }
+        )
+        
+        # Response time histogram
+        response_times = [r["response_time"] for r in results if isinstance(r["response_time"], (int, float))]
+        time_fig = px.histogram(
+            x=response_times,
+            nbins=30,
+            title="Response Time Distribution",
+            labels={"x": "Response Time (ms)", "y": "Count"},
+            color_discrete_sequence=["#4D77FF"]
+        )
+        
+        return {
+            "status_distribution": status_fig,
+            "response_times": time_fig
+        }
+
+    def save_history(self, analysis_data: Dict):
+        """Save analysis history for trend monitoring"""
+        timestamp = datetime.now().isoformat()
+        self.state["history"].append({
+            "timestamp": timestamp,
+            "metrics": analysis_data["metrics"],
+            "health_score": analysis_data["health_score"]
+        })
+        
+        # Keep only last 30 days of history
+        self.state["history"] = [
+            h for h in self.state["history"]
+            if datetime.fromisoformat(h["timestamp"]) > datetime.now() - timedelta(days=30)
+        ]
+
+    def generate_trend_chart(self) -> go.Figure:
+        """Generate trend chart from historical data"""
+        if not self.state["history"]:
+            return None
+        
+        df = pd.DataFrame(self.state["history"])
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=df["timestamp"],
+            y=df["health_score"],
+            mode="lines+markers",
+            name="Health Score",
+            line=dict(color="#4D77FF")
+        ))
+        
+        fig.update_layout(
+            title="Sitemap Health Score Trend",
+            xaxis_title="Date",
+            yaxis_title="Health Score",
+            hovermode="x unified"
+        )
+        
+        return fig
 
     def test_url(self, url_data: Dict) -> Dict:
         """Test a single URL and return results"""
@@ -287,7 +529,9 @@ def main():
             "sitemap_content": None,
             "urls": [],
             "validation_results": None,
-            "robots_txt_data": None
+            "robots_txt_data": None,
+            "analysis": None,
+            "visualizations": None
         }
 
     # App Header
@@ -349,7 +593,10 @@ def main():
                             "sitemap_url": sitemap_url,
                             "sitemap_content": sitemap_content,
                             "urls": urls,
-                            "robots_txt_data": robots_txt_data
+                            "robots_txt_data": robots_txt_data,
+                            "validation_results": None,
+                            "analysis": None,
+                            "visualizations": None
                         }
                         
                         st.success(f"Loaded {len(urls)} URLs from sitemap")
@@ -359,7 +606,13 @@ def main():
     # Show analysis if data is available
     if st.session_state.sitemap_data.get("urls"):
         # Create tabs
-        tab1, tab2, tab3 = st.tabs(["Dashboard", "URL Testing", "Robots.txt"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "Dashboard",
+            "URL Testing",
+            "Visualizations",
+            "Robots.txt",
+            "HTML Sitemap"
+        ])
         
         with tab1:
             st.subheader("Dashboard Overview")
@@ -378,11 +631,63 @@ def main():
             with col3:
                 st.metric("Total Videos", total_videos)
             
-            # Show URL table
-            st.dataframe(pd.DataFrame(urls))
+            # Show health analysis if available
+            if st.session_state.sitemap_data.get("analysis"):
+                analysis = st.session_state.sitemap_data["analysis"]
+                st.metric("Health Score", f"{analysis['health_score']}%")
+                
+                if analysis["issues"]:
+                    st.subheader("Issues")
+                    for issue in analysis["issues"]:
+                        if issue["type"] == "error":
+                            st.error(issue["message"])
+                        else:
+                            st.warning(issue["message"])
+                
+                if analysis["recommendations"]:
+                    st.subheader("Recommendations")
+                    for rec in analysis["recommendations"]:
+                        st.info(rec)
+            
+            # Show URL table with filtering
+            st.subheader("URLs")
+            df = pd.DataFrame(urls)
+            
+            # Add filters
+            col1, col2 = st.columns(2)
+            with col1:
+                search = st.text_input("🔍 Filter URLs", "")
+            with col2:
+                has_media = st.checkbox("Show only URLs with media")
+            
+            if search:
+                df = df[df["url"].str.contains(search, case=False)]
+            if has_media:
+                df = df[df.apply(lambda x: len(x["images"]) + len(x["videos"]) > 0, axis=1)]
+            
+            st.dataframe(df)
             
         with tab2:
             st.subheader("URL Testing")
+            
+            # Test settings
+            with st.expander("⚙️ Test Settings"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    validator.state["concurrent_requests"] = st.slider(
+                        "Concurrent Requests",
+                        min_value=1,
+                        max_value=20,
+                        value=5
+                    )
+                with col2:
+                    validator.state["timeout"] = st.slider(
+                        "Timeout (seconds)",
+                        min_value=1,
+                        max_value=30,
+                        value=10
+                    )
+            
             if st.button("Test URLs"):
                 with st.spinner("Testing URLs..."):
                     results = []
@@ -394,36 +699,95 @@ def main():
                         results.append(result)
                         progress.progress((i + 1) / len(urls))
                     
-                    st.session_state.sitemap_data["validation_results"] = results
+                    # Generate analysis and visualizations
+                    analysis = validator.analyze_sitemap_health(urls, results)
+                    visualizations = validator.generate_visualizations(results)
+                    
+                    # Save to session state
+                    st.session_state.sitemap_data.update({
+                        "validation_results": results,
+                        "analysis": analysis,
+                        "visualizations": visualizations
+                    })
+                    
+                    # Save to history
+                    validator.save_history(analysis)
+                    
                     st.success("Testing complete!")
-                    
-                    # Show results summary
-                    status_counts = {
-                        "2xx": sum(1 for r in results if r["status_group"] == "2xx"),
-                        "3xx": sum(1 for r in results if r["status_group"] == "3xx"),
-                        "4xx": sum(1 for r in results if r["status_group"] == "4xx"),
-                        "5xx": sum(1 for r in results if r["status_group"] == "5xx"),
-                        "error": sum(1 for r in results if r["status_group"] == "error")
-                    }
-                    
-                    col1, col2, col3, col4, col5 = st.columns(5)
-                    with col1:
-                        st.metric("Success (2xx)", status_counts["2xx"])
-                    with col2:
-                        st.metric("Redirects (3xx)", status_counts["3xx"])
-                    with col3:
-                        st.metric("Client Errors (4xx)", status_counts["4xx"])
-                    with col4:
-                        st.metric("Server Errors (5xx)", status_counts["5xx"])
-                    with col5:
-                        st.metric("Other Errors", status_counts["error"])
             
             # Show results if available
             if st.session_state.sitemap_data.get("validation_results"):
-                results_df = pd.DataFrame(st.session_state.sitemap_data["validation_results"])
+                results = st.session_state.sitemap_data["validation_results"]
+                
+                # Status summary
+                status_counts = {
+                    "2xx": sum(1 for r in results if r["status_group"] == "2xx"),
+                    "3xx": sum(1 for r in results if r["status_group"] == "3xx"),
+                    "4xx": sum(1 for r in results if r["status_group"] == "4xx"),
+                    "5xx": sum(1 for r in results if r["status_group"] == "5xx"),
+                    "error": sum(1 for r in results if r["status_group"] == "error")
+                }
+                
+                col1, col2, col3, col4, col5 = st.columns(5)
+                with col1:
+                    st.metric("Success (2xx)", status_counts["2xx"])
+                with col2:
+                    st.metric("Redirects (3xx)", status_counts["3xx"])
+                with col3:
+                    st.metric("Client Errors (4xx)", status_counts["4xx"])
+                with col4:
+                    st.metric("Server Errors (5xx)", status_counts["5xx"])
+                with col5:
+                    st.metric("Other Errors", status_counts["error"])
+                
+                # Results table with filtering
+                st.subheader("Detailed Results")
+                results_df = pd.DataFrame(results)
+                
+                # Add filters
+                col1, col2 = st.columns(2)
+                with col1:
+                    status_filter = st.multiselect(
+                        "Filter by Status",
+                        options=["2xx", "3xx", "4xx", "5xx", "error"],
+                        default=[]
+                    )
+                with col2:
+                    min_time = st.number_input("Min Response Time (ms)", value=0)
+                
+                if status_filter:
+                    results_df = results_df[results_df["status_group"].isin(status_filter)]
+                results_df = results_df[results_df["response_time"] >= min_time]
+                
                 st.dataframe(results_df)
+                
+                # Export options
+                if st.button("📥 Export Results"):
+                    csv = results_df.to_csv(index=False)
+                    b64 = base64.b64encode(csv.encode()).decode()
+                    href = f'<a href="data:file/csv;base64,{b64}" download="sitemap_results.csv" class="download-button">Download CSV</a>'
+                    st.markdown(href, unsafe_allow_html=True)
         
         with tab3:
+            st.subheader("Visualizations")
+            
+            if st.session_state.sitemap_data.get("visualizations"):
+                visualizations = st.session_state.sitemap_data["visualizations"]
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.plotly_chart(visualizations["status_distribution"], use_container_width=True)
+                with col2:
+                    st.plotly_chart(visualizations["response_times"], use_container_width=True)
+                
+                # Show trend chart
+                trend_chart = validator.generate_trend_chart()
+                if trend_chart:
+                    st.plotly_chart(trend_chart, use_container_width=True)
+            else:
+                st.info("Run URL testing to see visualizations")
+        
+        with tab4:
             st.subheader("Robots.txt Analysis")
             robots_data = st.session_state.sitemap_data.get("robots_txt_data")
             
@@ -439,8 +803,30 @@ def main():
                         st.subheader("Sitemaps in robots.txt")
                         for sitemap in robots_data["sitemaps"]:
                             st.write(f"- {sitemap}")
+                    
+                    if robots_data["content"]:
+                        st.subheader("robots.txt Content")
+                        st.code(robots_data["content"], language="text")
                 else:
                     st.error("❌ robots.txt not found")
+        
+        with tab5:
+            st.subheader("HTML Sitemap")
+            
+            if st.button("Generate HTML Sitemap"):
+                with st.spinner("Generating HTML sitemap..."):
+                    html_sitemap = validator.generate_html_sitemap(
+                        st.session_state.sitemap_data["urls"]
+                    )
+                    
+                    # Show preview
+                    st.subheader("Preview")
+                    st.components.v1.html(html_sitemap, height=400, scrolling=True)
+                    
+                    # Download option
+                    b64 = base64.b64encode(html_sitemap.encode()).decode()
+                    href = f'<a href="data:text/html;base64,{b64}" download="sitemap.html" class="download-button">Download HTML Sitemap</a>'
+                    st.markdown(href, unsafe_allow_html=True)
 
     # Footer
     st.markdown("""
