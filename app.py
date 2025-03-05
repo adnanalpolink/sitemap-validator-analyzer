@@ -611,33 +611,33 @@ class SitemapValidator:
         """, unsafe_allow_html=True)
 		
 @st.cache_data(ttl=3600)
-    def load_sitemap(_self, url: str) -> Tuple[str, Dict]:
-        """Load and parse sitemap XML with Streamlit caching"""
-        info = {
-            "status": "error",
-            "message": "",
-            "content_type": None,
-            "size": 0,
-            "is_gzipped": False
-        }
+def load_sitemap(_self, url: str) -> Tuple[str, Dict]:
+    """Load and parse sitemap XML with Streamlit caching"""
+    info = {
+        "status": "error",
+        "message": "",
+        "content_type": None,
+        "size": 0,
+        "is_gzipped": False
+    }
+    
+    try:
+        headers = {"User-Agent": _self.state["user_agent"]}
+        response = requests.get(url, headers=headers, timeout=_self.state["timeout"])
         
-        try:
-            headers = {"User-Agent": _self.state["user_agent"]}
-            response = requests.get(url, headers=headers, timeout=_self.state["timeout"])
-            
-            info["status"] = "success" if response.status_code == 200 else "error"
-            info["message"] = f"HTTP Status: {response.status_code}"
-            info["content_type"] = response.headers.get("Content-Type", "")
-            info["size"] = len(response.content)
-            info["is_gzipped"] = response.headers.get("Content-Encoding", "") == "gzip"
-            
-            if response.status_code != 200:
-                return "", info
-                
-            return response.text, info
-        except Exception as e:
-            info["message"] = f"Error loading sitemap: {str(e)}"
+        info["status"] = "success" if response.status_code == 200 else "error"
+        info["message"] = f"HTTP Status: {response.status_code}"
+        info["content_type"] = response.headers.get("Content-Type", "")
+        info["size"] = len(response.content)
+        info["is_gzipped"] = response.headers.get("Content-Encoding", "") == "gzip"
+        
+        if response.status_code != 200:
             return "", info
+            
+        return response.text, info
+    except Exception as e:
+        info["message"] = f"Error loading sitemap: {str(e)}"
+        return "", info
 
     @st.cache_data(ttl=3600)
     def extract_urls_from_sitemap(_self, xml_content: str) -> Tuple[List[URLData], SitemapInfo]:
