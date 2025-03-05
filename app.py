@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup
 import pandas as pd
 import urllib.parse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import re
 from typing import Dict, List, Any, Union
 import concurrent.futures
@@ -229,6 +229,33 @@ class SitemapValidator:
         """
         return html
 
+    def parse_date(self, date_str: str) -> datetime:
+        """Parse date string in various formats"""
+        if not date_str:
+            return None
+        try:
+            # Remove timezone indicator 'Z' and replace with UTC offset
+            date_str = date_str.replace('Z', '+00:00')
+            
+            # Try parsing with various formats
+            for fmt in [
+                "%Y-%m-%dT%H:%M:%S%z",  # 2024-02-26T15:30:00+00:00
+                "%Y-%m-%dT%H:%M:%S.%f%z",  # 2024-02-26T15:30:00.000+00:00
+                "%Y-%m-%d",  # 2024-02-26
+                "%Y-%m-%dT%H:%M:%S"  # 2024-02-26T15:30:00
+            ]:
+                try:
+                    dt = datetime.strptime(date_str, fmt)
+                    # If no timezone info, assume UTC
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    return dt
+                except ValueError:
+                    continue
+            return None
+        except Exception:
+            return None
+
     def analyze_sitemap_health(self, urls: List[Dict], results: List[Dict]) -> Dict:
         """Analyze sitemap health and generate recommendations"""
         analysis = {
@@ -276,9 +303,14 @@ class SitemapValidator:
             )
         
         # Check lastmod dates
-        old_urls = sum(1 for url in urls if url.get("lastmod") and 
-                      datetime.fromisoformat(url["lastmod"].replace('Z', '+00:00')) < 
-                      datetime.now() - timedelta(days=180))
+        six_months_ago = datetime.now(timezone.utc) - timedelta(days=180)
+        old_urls = 0
+        for url in urls:
+            if url.get("lastmod"):
+                parsed_date = self.parse_date(url["lastmod"])
+                if parsed_date and parsed_date < six_months_ago:
+                    old_urls += 1
+        
         if old_urls > 0:
             analysis["recommendations"].append(
                 f"Update lastmod dates for {old_urls} URLs that haven't been modified in 6 months"
