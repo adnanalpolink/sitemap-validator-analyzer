@@ -1406,6 +1406,56 @@ class SitemapValidator:
             "content_types": content_fig
         }
 
+    def detect_sitemaps(self, url: str) -> List[str]:
+        """
+        Detect sitemaps for a given domain URL by:
+        1. Checking common sitemap locations
+        2. Checking robots.txt for sitemap declarations
+        """
+        discovered_sitemaps = []
+        
+        # Normalize the URL to get the base domain
+        if not url.startswith(('http://', 'https://')):
+            url = 'https://' + url
+        
+        parsed_url = urlparse(url)
+        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        
+        # Common sitemap paths to check
+        common_paths = [
+            '/sitemap.xml',
+            '/sitemap_index.xml',
+            '/sitemap-index.xml',
+            '/sitemaps.xml',
+            '/sitemap/sitemap.xml',
+            '/sitemap/index.xml',
+            '/wp-sitemap.xml',  # WordPress
+            '/sitemap1.xml'
+        ]
+        
+        # Check common locations
+        for path in common_paths:
+            sitemap_url = base_url + path
+            try:
+                response = requests.head(
+                    sitemap_url,
+                    headers={"User-Agent": self.state["user_agent"]},
+                    timeout=self.state["timeout"]
+                )
+                if response.status_code == 200:
+                    discovered_sitemaps.append(sitemap_url)
+            except Exception:
+                continue
+        
+        # Check robots.txt for sitemap declarations
+        robots_data = self.check_robots_txt(url)
+        if robots_data.get("found") and robots_data.get("sitemaps"):
+            for sitemap in robots_data["sitemaps"]:
+                if sitemap not in discovered_sitemaps:
+                    discovered_sitemaps.append(sitemap)
+        
+        return discovered_sitemaps
+
     def check_robots_txt(self, url: str) -> Dict[str, Any]:
         """Check robots.txt file for a given URL and analyze its contents"""
         try:
