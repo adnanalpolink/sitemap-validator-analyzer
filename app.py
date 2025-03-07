@@ -1643,44 +1643,73 @@ def main():
                 if detected_sitemaps:
                     st.success(f"Found {len(detected_sitemaps)} sitemaps!")
                     # Store detected sitemaps in session state
-                    if 'detected_sitemaps' not in st.session_state:
-                        st.session_state.detected_sitemaps = detected_sitemaps
+                    st.session_state.detected_sitemaps = detected_sitemaps
                     
                     # Create a selectbox for the user to choose a sitemap
                     selected_sitemap = st.selectbox(
                         "Select a sitemap",
-                        options=detected_sitemaps,
-                        key="selected_sitemap"
+                        options=detected_sitemaps
                     )
                     
                     # Update the sitemap URL input field
                     sitemap_url = selected_sitemap
                     
-                    # Add a button to load the selected sitemap
-                    if st.button("Load Selected Sitemap"):
-                        with st.spinner("Loading and parsing sitemap..."):
-                            sitemap_content, info = validator.load_sitemap(selected_sitemap)
-                            
-                            if info["status"] == "success" and sitemap_content:
-                                # Only load URLs from the current sitemap, not recursively
-                                urls, sitemap_info = validator.extract_urls_from_sitemap(sitemap_content, recursive=False)
-                                robots_txt_data = validator.check_robots_txt(selected_sitemap)
+                    # Create columns for the load buttons
+                    load_col1, load_col2 = st.columns(2)
+                    
+                    with load_col1:
+                        # Add a button to load the selected sitemap (non-recursive)
+                        if st.button("Load Selected Sitemap Only", key="load_selected_only"):
+                            with st.spinner("Loading selected sitemap only..."):
+                                sitemap_content, info = validator.load_sitemap(selected_sitemap)
                                 
-                                # Save to session state
-                                if 'sitemap_data' not in st.session_state:
-                                    st.session_state.sitemap_data = {}
+                                if info["status"] == "success" and sitemap_content:
+                                    # Only load URLs from the current sitemap, not recursively
+                                    urls, sitemap_info = validator.extract_urls_from_sitemap(sitemap_content, recursive=False)
+                                    robots_txt_data = validator.check_robots_txt(selected_sitemap)
                                     
-                                st.session_state.sitemap_data.update({
-                                    "sitemap_url": selected_sitemap,
-                                    "sitemap_content": sitemap_content,
-                                    "urls": urls,
-                                    "sitemap_info": sitemap_info,
-                                    "robots_txt_data": robots_txt_data
-                                })
+                                    # Save to session state
+                                    if 'sitemap_data' not in st.session_state:
+                                        st.session_state.sitemap_data = {}
+                                        
+                                    st.session_state.sitemap_data.update({
+                                        "sitemap_url": selected_sitemap,
+                                        "sitemap_content": sitemap_content,
+                                        "urls": urls,
+                                        "sitemap_info": sitemap_info,
+                                        "robots_txt_data": robots_txt_data
+                                    })
+                                    
+                                    st.success(f"✅ Successfully loaded {len(urls)} URLs from selected sitemap")
+                                else:
+                                    st.error(f"❌ Failed to load sitemap: {info['message']}")
+                    
+                    with load_col2:
+                        # Add a button to load the selected sitemap recursively
+                        if st.button("Load All Linked Sitemaps", key="load_all_linked"):
+                            with st.spinner("Loading all linked sitemaps..."):
+                                sitemap_content, info = validator.load_sitemap(selected_sitemap)
                                 
-                                st.success(f"✅ Successfully loaded {len(urls)} URLs from sitemap")
-                            else:
-                                st.error(f"❌ Failed to load sitemap: {info['message']}")
+                                if info["status"] == "success" and sitemap_content:
+                                    # Load URLs recursively from all linked sitemaps
+                                    urls, sitemap_info = validator.extract_urls_from_sitemap(sitemap_content, recursive=True)
+                                    robots_txt_data = validator.check_robots_txt(selected_sitemap)
+                                    
+                                    # Save to session state
+                                    if 'sitemap_data' not in st.session_state:
+                                        st.session_state.sitemap_data = {}
+                                        
+                                    st.session_state.sitemap_data.update({
+                                        "sitemap_url": selected_sitemap,
+                                        "sitemap_content": sitemap_content,
+                                        "urls": urls,
+                                        "sitemap_info": sitemap_info,
+                                        "robots_txt_data": robots_txt_data
+                                    })
+                                    
+                                    st.success(f"✅ Successfully loaded {len(urls)} URLs from all linked sitemaps")
+                                else:
+                                    st.error(f"❌ Failed to load sitemap: {info['message']}")
                 else:
                     st.warning("No sitemaps found. Try entering a sitemap URL manually.")
     
