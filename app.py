@@ -493,8 +493,14 @@ class SitemapValidator:
             return "", info
 
     @st.cache_data(ttl=3600)
-    def extract_urls_from_sitemap(_self, xml_content: str) -> Tuple[List[URLData], SitemapInfo]:
-        """Extract URLs and metadata from sitemap XML with support for sitemap index"""
+    def extract_urls_from_sitemap(_self, xml_content: str, recursive: bool = True) -> Tuple[List[URLData], SitemapInfo]:
+        """
+        Extract URLs and metadata from sitemap XML with support for sitemap index
+        
+        Args:
+            xml_content: The XML content of the sitemap
+            recursive: If True, recursively load URLs from sitemap indexes. If False, only return the sitemap index entries.
+        """
         sitemap_info = SitemapInfo(
             url="",
             type="unknown",
@@ -509,11 +515,29 @@ class SitemapValidator:
             sitemapindex = soup.find('sitemapindex')
             if sitemapindex:
                 sitemap_info.type = "index"
+                
+                # If not recursive, just extract the sitemap URLs from the index
+                if not recursive:
+                    for sitemap in sitemapindex.find_all('sitemap'):
+                        loc = sitemap.find('loc').text if sitemap.find('loc') else None
+                        lastmod = sitemap.find('lastmod').text if sitemap.find('lastmod') else None
+                        
+                        if loc:
+                            url_data = URLData(
+                                url=loc,
+                                lastmod=lastmod
+                            )
+                            urls.append(url_data)
+                    
+                    sitemap_info.urls_count = len(urls)
+                    return urls, sitemap_info
+                
+                # If recursive, load each sitemap and extract its URLs
                 for sitemap in sitemapindex.find_all('sitemap'):
                     loc = sitemap.find('loc').text if sitemap.find('loc') else None
                     if loc:
                         sub_content, _ = _self.load_sitemap(loc)
-                        sub_urls, _ = _self.extract_urls_from_sitemap(sub_content)
+                        sub_urls, _ = _self.extract_urls_from_sitemap(sub_content, recursive=True)
                         urls.extend(sub_urls)
                 
                 sitemap_info.urls_count = len(urls)
@@ -1618,11 +1642,45 @@ def main():
                 detected_sitemaps = validator.detect_sitemaps(sitemap_url)
                 if detected_sitemaps:
                     st.success(f"Found {len(detected_sitemaps)} sitemaps!")
+                    # Store detected sitemaps in session state
+                    if 'detected_sitemaps' not in st.session_state:
+                        st.session_state.detected_sitemaps = detected_sitemaps
+                    
+                    # Create a selectbox for the user to choose a sitemap
                     selected_sitemap = st.selectbox(
                         "Select a sitemap",
-                        options=detected_sitemaps
+                        options=detected_sitemaps,
+                        key="selected_sitemap"
                     )
+                    
+                    # Update the sitemap URL input field
                     sitemap_url = selected_sitemap
+                    
+                    # Add a button to load the selected sitemap
+                    if st.button("Load Selected Sitemap"):
+                        with st.spinner("Loading and parsing sitemap..."):
+                            sitemap_content, info = validator.load_sitemap(selected_sitemap)
+                            
+                            if info["status"] == "success" and sitemap_content:
+                                # Only load URLs from the current sitemap, not recursively
+                                urls, sitemap_info = validator.extract_urls_from_sitemap(sitemap_content, recursive=False)
+                                robots_txt_data = validator.check_robots_txt(selected_sitemap)
+                                
+                                # Save to session state
+                                if 'sitemap_data' not in st.session_state:
+                                    st.session_state.sitemap_data = {}
+                                    
+                                st.session_state.sitemap_data.update({
+                                    "sitemap_url": selected_sitemap,
+                                    "sitemap_content": sitemap_content,
+                                    "urls": urls,
+                                    "sitemap_info": sitemap_info,
+                                    "robots_txt_data": robots_txt_data
+                                })
+                                
+                                st.success(f"✅ Successfully loaded {len(urls)} URLs from sitemap")
+                            else:
+                                st.error(f"❌ Failed to load sitemap: {info['message']}")
                 else:
                     st.warning("No sitemaps found. Try entering a sitemap URL manually.")
     
